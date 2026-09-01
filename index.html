@@ -1,0 +1,1284 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Registo de Entregas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg: #FBEEDD;
+    --surface: #FFFDF8;
+    --ink: #2B1B14;
+    --ink-soft: #6b5847;
+    --mustard: #E3A63B;
+    --mustard-dark: #C98A22;
+    --tomato: #C6402F;
+    --lettuce: #5B7B4F;
+    --line: #E3D2B4;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Work Sans', sans-serif;
+    min-height: 100vh;
+  }
+  #app{
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 20px 18px 60px;
+    display: flex;
+    flex-direction: column;
+  }
+  .brand{
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 26px;
+    line-height: 1.05;
+    letter-spacing: -0.5px;
+    margin: 6px 0 2px;
+  }
+  .brand-sub{
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+  .tile{
+    display:block;
+    width:100%;
+    text-align:left;
+    border:none;
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    font-family: 'Work Sans', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    cursor: pointer;
+    margin-bottom: 14px;
+    transition: transform .12s ease;
+  }
+  .tile:active{ transform: scale(0.98); }
+  .tile-driver{ background: var(--mustard); color: var(--ink); }
+  .tile-admin{ background: var(--ink); color: var(--bg); }
+  .tile small{
+    display:block;
+    font-weight: 500;
+    font-size: 13px;
+    margin-top: 4px;
+    opacity: .8;
+  }
+  .card{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label{
+    display:block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  input[type=text], input[type=password]{
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+  input:focus{ outline: 2px solid var(--mustard-dark); border-color: transparent; }
+  .btn{
+    display:inline-block;
+    border:none;
+    border-radius: 10px;
+    padding: 13px 18px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 15px;
+    cursor:pointer;
+    width: 100%;
+  }
+  .btn-primary{ background: var(--tomato); color: #fff; }
+  .btn-secondary{ background: transparent; color: var(--ink-soft); border: 1.5px solid var(--line); margin-top:8px; }
+  .btn-ghost{ background: transparent; color: var(--ink-soft); text-decoration: underline; padding: 6px 0; width: auto; font-size: 13px; font-weight: 600; }
+  .type-row{ display:flex; gap: 10px; margin-bottom: 18px; }
+  .type-btn{
+    flex:1;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    padding: 14px 8px;
+    text-align:center;
+    cursor:pointer;
+    font-weight: 700;
+  }
+  .type-btn.active-cidade{ background: var(--lettuce); border-color: var(--lettuce); color:#fff; }
+  .type-btn.active-estrada{ background: var(--tomato); border-color: var(--tomato); color:#fff; }
+  .type-btn span{ display:block; font-size:12px; font-weight:500; margin-top:2px; }
+  .topbar{
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .topbar h1{
+    font-family:'Archivo Black', sans-serif;
+    font-size: 19px;
+    margin:0;
+  }
+  .stat-row{ display:flex; gap:10px; margin-bottom: 18px; }
+  .stat{
+    flex:1;
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align:center;
+  }
+  .stat b{ display:block; font-size: 22px; font-family:'Archivo Black', sans-serif; }
+  .stat span{ font-size: 12px; color: var(--ink-soft); }
+  .entrega-item{
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .entrega-top{ display:flex; justify-content: space-between; align-items:flex-start; gap:8px; }
+  .entrega-cliente{ font-weight:700; font-size:15px; }
+  .entrega-meta{ font-size:12.5px; color: var(--ink-soft); margin-top:2px; }
+  .badge{
+    font-size: 11px;
+    font-weight:700;
+    padding: 4px 9px;
+    border-radius: 20px;
+    color:#fff;
+    white-space:nowrap;
+  }
+  .badge-cidade{ background: var(--lettuce); }
+  .badge-estrada{ background: var(--tomato); }
+  .entrega-valor{ font-family:'Archivo Black', sans-serif; font-size:16px; margin-top:8px; }
+  .entrega-actions{ display:flex; gap:8px; margin-top:10px; }
+  .mini-btn{
+    flex:1;
+    border:none;
+    border-radius: 8px;
+    padding: 9px 6px;
+    font-size: 13px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .mini-edit{ background: var(--mustard); color: var(--ink); }
+  .mini-del{ background: #f4e3df; color: var(--tomato); }
+  .mini-confirm{ background: var(--tomato); color:#fff; }
+  .empty{
+    text-align:center;
+    color: var(--ink-soft);
+    font-size: 14px;
+    padding: 30px 10px;
+  }
+  .driver-section{ margin-bottom: 20px; }
+  .driver-header{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    padding: 12px 14px;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 10px 10px 0 0;
+    cursor:pointer;
+  }
+  .driver-header b{ font-size: 15px; }
+  .driver-header .amount{ font-family:'Archivo Black', sans-serif; font-size: 15px; }
+  .driver-body{
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 12px;
+  }
+  .error-msg{
+    background: #f4e3df;
+    color: var(--tomato);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .loading{ text-align:center; padding: 60px 10px; color: var(--ink-soft); }
+  .footer-note{ text-align:center; font-size:11.5px; color: var(--ink-soft); margin-top: 24px; }
+  .badge-desconto{ background: var(--ink); }
+  .period-row{ display:flex; gap:8px; margin-bottom: 16px; }
+  .period-btn{
+    flex:1;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    padding: 10px 4px;
+    text-align:center;
+    cursor:pointer;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .period-btn.active{ background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .section-title{ font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 18px 0 8px; text-transform: none; }
+  .report-table{ width:100%; border-collapse: collapse; margin-bottom: 10px; }
+  .report-table th, .report-table td{
+    text-align:left;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .report-table th{ color: var(--ink-soft); font-weight:600; }
+  .report-total-row{ display:flex; justify-content: space-between; padding: 10px 6px; font-weight:700; }
+  .report-total-row.net{ font-family:'Archivo Black', sans-serif; font-size: 17px; border-top: 2px solid var(--ink); margin-top: 6px; }
+  @media print{
+    body *{ visibility: hidden; }
+    .print-area, .print-area *{ visibility: visible; }
+    .print-area{ position: absolute; left:0; top:0; width:100%; padding: 0 10px; }
+    .no-print{ display:none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Carregando...</div></div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDKdV4laGoPMGz2hz-rUd77OIp4BsiX0s0",
+  authDomain: "appmotoboys.firebaseapp.com",
+  projectId: "appmotoboys",
+  storageBucket: "appmotoboys.firebasestorage.app",
+  messagingSenderId: "138452699945",
+  appId: "1:138452699945:web:09e5b28d1d405cb599c538"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+const auth = firebase.auth();
+
+const DOC_REF = db.collection('app').doc('estado');
+let unsub = null;
+
+const VALORES = { cidade: 3, estrada: 6 };
+
+let state = {
+  view: 'login',
+  driverInput: '',
+  driverPendingName: '',
+  currentDriver: null,
+  data: { motoboys: [], entregas: [], descontos: [] },
+  novoCliente: '',
+  novoTipo: 'cidade',
+  editingId: null,
+  editCliente: '',
+  editTipo: 'cidade',
+  confirmDeleteId: null,
+  adminPasswordInput: '',
+  adminError: '',
+  adminSenha: '1234',
+  adminChangeError: '',
+  driverError: '',
+  changeError: '',
+  openDriverSection: null,
+  periodos: {},
+  descontoErro: '',
+  descInputs: {},
+  confirmDeleteDescontoId: null,
+  relatorio: null,
+  loaded: false
+};
+
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function formatMoney(v){
+  return 'R$ ' + v.toFixed(2).replace('.', ',');
+}
+
+function formatHorario(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+// ---------- períodos (diário / semanal / mensal) ----------
+
+function isSameDay(d, ref){
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate();
+}
+
+function startOfWeek(ref){
+  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const dia = d.getDay();
+  const diff = (dia === 0 ? -6 : 1) - dia;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function startOfMonth(ref){
+  return new Date(ref.getFullYear(), ref.getMonth(), 1);
+}
+
+function filterByPeriod(items, periodo, campoData){
+  if(periodo === 'tudo') return items;
+  const agora = new Date();
+  return items.filter(item => {
+    const d = new Date(item[campoData]);
+    if(periodo === 'dia') return isSameDay(d, agora);
+    if(periodo === 'semana'){
+      const inicio = startOfWeek(agora);
+      const fim = new Date(inicio); fim.setDate(inicio.getDate() + 7);
+      return d >= inicio && d < fim;
+    }
+    if(periodo === 'mes'){
+      const inicio = startOfMonth(agora);
+      const fim = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 1);
+      return d >= inicio && d < fim;
+    }
+    return true;
+  });
+}
+
+function periodoLabel(periodo){
+  const agora = new Date();
+  if(periodo === 'dia') return agora.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+  if(periodo === 'semana'){
+    const inicio = startOfWeek(agora);
+    const fim = new Date(inicio); fim.setDate(inicio.getDate() + 6);
+    return 'Semana de ' + inicio.toLocaleDateString('pt-BR') + ' a ' + fim.toLocaleDateString('pt-BR');
+  }
+  if(periodo === 'mes') return agora.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  return 'Todo o período';
+}
+
+function getPeriodo(idx){
+  return (state.periodos && state.periodos[idx]) || 'semana';
+}
+
+function normalizarDados(){
+  if(!state.data.motoboys) state.data.motoboys = [];
+  if(!state.data.entregas) state.data.entregas = [];
+  if(!state.data.descontos) state.data.descontos = [];
+  state.data.motoboys = state.data.motoboys.map(m => typeof m === 'string' ? { nome: m, senha: null } : m);
+}
+
+async function inicializarFirebase(){
+  try{
+    await auth.signInAnonymously();
+  }catch(e){
+    console.error('Erro ao autenticar anonimamente', e);
+  }
+
+  try{
+    const snap = await DOC_REF.get();
+    if(snap.exists){
+      state.data = snap.data();
+    }else{
+      await DOC_REF.set(state.data);
+    }
+    normalizarDados();
+  }catch(e){
+    console.error('Erro ao ler dados do Firestore', e);
+    state.data = { motoboys: [], entregas: [], descontos: [] };
+  }
+
+  state.loaded = true;
+  render();
+  iniciarListener();
+}
+
+function iniciarListener(){
+  if(unsub) unsub();
+  unsub = onSnapshot(DOC_REF, snap => {
+    if(snap.exists){
+      const novos = snap.data();
+      const atual = JSON.stringify(state.data);
+      if(JSON.stringify(novos) !== atual){
+        state.data = novos;
+        normalizarDados();
+        render();
+      }
+    }
+  }, err => {
+    console.error('Erro no listener Firestore', err);
+  });
+}
+
+async function saveData(){
+  try{
+    await DOC_REF.set(state.data);
+  }catch(e){
+    console.error('Erro ao salvar no Firestore', e);
+  }
+}
+
+// ---------- ações ----------
+
+function goLogin(){
+  state.view = 'login';
+  state.driverInput = '';
+  state.driverPendingName = '';
+  state.currentDriver = null;
+  state.driverError = '';
+  state.changeError = '';
+  state.adminPasswordInput = '';
+  state.adminError = '';
+  render();
+}
+
+function goDriverName(){
+  state.view = 'driverName';
+  state.driverError = '';
+  render();
+}
+
+async function submitDriverName(){
+  const nomeInput = document.getElementById('driverNameInput');
+  const nome = (nomeInput ? nomeInput.value : state.driverInput).trim();
+  if(!nome){
+    state.driverError = 'Digite seu nome para continuar.';
+    render();
+    return;
+  }
+  const existente = state.data.motoboys.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+  state.driverPendingName = existente ? existente.nome : nome;
+
+  if(!existente || !existente.senha){
+    state.view = 'driverSetPassword';
+    state.driverError = '';
+    render();
+    return;
+  }
+
+  state.view = 'driverLoginPassword';
+  state.driverError = '';
+  render();
+}
+
+async function submitNewPassword(){
+  const p1 = document.getElementById('novaSenhaInput').value;
+  const p2 = document.getElementById('confirmSenhaInput').value;
+  if(!p1 || p1.length < 4){
+    state.driverError = 'A senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(p1 !== p2){
+    state.driverError = 'As senhas não coincidem.';
+    render();
+    return;
+  }
+  let existente = state.data.motoboys.find(m => m.nome.toLowerCase() === state.driverPendingName.toLowerCase());
+  if(existente){
+    existente.senha = p1;
+  }else{
+    state.data.motoboys.push({ nome: state.driverPendingName, senha: p1 });
+  }
+  await saveData();
+  state.currentDriver = state.driverPendingName;
+  state.view = 'driverDashboard';
+  state.driverError = '';
+  render();
+}
+
+async function submitLoginPassword(){
+  const inp = document.getElementById('senhaLoginInput');
+  const senha = inp ? inp.value : '';
+  const m = state.data.motoboys.find(x => x.nome.toLowerCase() === state.driverPendingName.toLowerCase());
+  if(m && m.senha === senha){
+    state.currentDriver = m.nome;
+    state.view = 'driverDashboard';
+    state.driverError = '';
+    render();
+  }else{
+    state.driverError = 'Senha incorreta.';
+    render();
+  }
+}
+
+function goChangePassword(){
+  state.view = 'driverChangePassword';
+  state.changeError = '';
+  render();
+}
+
+function cancelChangePassword(){
+  state.view = 'driverDashboard';
+  state.changeError = '';
+  render();
+}
+
+async function submitChangePassword(){
+  const atual = document.getElementById('changeAtualInput').value;
+  const nova = document.getElementById('changeNovaInput').value;
+  const confirma = document.getElementById('changeConfirmaInput').value;
+  const m = state.data.motoboys.find(x => x.nome === state.currentDriver);
+  if(!m || m.senha !== atual){
+    state.changeError = 'Senha atual incorreta.';
+    render();
+    return;
+  }
+  if(!nova || nova.length < 4){
+    state.changeError = 'A nova senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(nova !== confirma){
+    state.changeError = 'As senhas novas não coincidem.';
+    render();
+    return;
+  }
+  m.senha = nova;
+  await saveData();
+  state.view = 'driverDashboard';
+  state.changeError = '';
+  render();
+}
+
+function setNovoTipo(tipo){
+  state.novoTipo = tipo;
+  render();
+}
+
+async function enviarEntrega(){
+  const clienteInput = document.getElementById('clienteInput');
+  const cliente = (clienteInput ? clienteInput.value : state.novoCliente).trim();
+  if(!cliente){
+    state.driverError = 'Digite o nome do cliente.';
+    render();
+    return;
+  }
+  const nova = {
+    id: uid(),
+    motoboy: state.currentDriver,
+    cliente: cliente,
+    tipo: state.novoTipo,
+    valor: VALORES[state.novoTipo],
+    horario: new Date().toISOString()
+  };
+  state.data.entregas.push(nova);
+  await saveData();
+  state.novoCliente = '';
+  state.novoTipo = 'cidade';
+  state.driverError = '';
+  render();
+}
+
+function startEdit(id){
+  const item = state.data.entregas.find(e => e.id === id);
+  if(!item) return;
+  state.editingId = id;
+  state.editCliente = item.cliente;
+  state.editTipo = item.tipo;
+  state.confirmDeleteId = null;
+  render();
+}
+
+function cancelEdit(){
+  state.editingId = null;
+  render();
+}
+
+function setEditTipo(tipo){
+  state.editTipo = tipo;
+  render();
+}
+
+async function salvarEdit(id){
+  const inp = document.getElementById('editClienteInput_' + id);
+  const cliente = (inp ? inp.value : state.editCliente).trim();
+  if(!cliente) return;
+  const item = state.data.entregas.find(e => e.id === id);
+  if(item){
+    item.cliente = cliente;
+    item.tipo = state.editTipo;
+    item.valor = VALORES[state.editTipo];
+    await saveData();
+  }
+  state.editingId = null;
+  render();
+}
+
+function askDelete(id){
+  state.confirmDeleteId = id;
+  render();
+}
+
+function cancelDelete(){
+  state.confirmDeleteId = null;
+  render();
+}
+
+async function confirmDelete(id){
+  state.data.entregas = state.data.entregas.filter(e => e.id !== id);
+  await saveData();
+  state.confirmDeleteId = null;
+  render();
+}
+
+function goAdminLogin(){
+  state.view = 'adminLogin';
+  state.adminError = '';
+  render();
+}
+
+async function submitAdminPassword(){
+  const inp = document.getElementById('adminPasswordInput');
+  const senha = inp ? inp.value : '';
+  const snap = await DOC_REF.get();
+  const dados = snap.exists ? snap.data() : {};
+  const senhaAdmin = dados.adminSenha || '1234';
+  state.adminSenha = senhaAdmin;
+  if(senha === senhaAdmin){
+    state.view = 'adminDashboard';
+    state.adminError = '';
+    render();
+  }else{
+    state.adminError = 'Senha incorreta.';
+    render();
+  }
+}
+
+function goAdminChangePassword(){
+  state.view = 'adminChangePassword';
+  state.adminChangeError = '';
+  render();
+}
+
+function cancelAdminChangePassword(){
+  state.view = 'adminDashboard';
+  state.adminChangeError = '';
+  render();
+}
+
+async function submitAdminChangePassword(){
+  const atual = document.getElementById('adminChangeAtualInput').value;
+  const nova = document.getElementById('adminChangeNovaInput').value;
+  const confirma = document.getElementById('adminChangeConfirmaInput').value;
+  if(atual !== state.adminSenha){
+    state.adminChangeError = 'Senha atual incorreta.';
+    render();
+    return;
+  }
+  if(!nova || nova.length < 4){
+    state.adminChangeError = 'A nova senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(nova !== confirma){
+    state.adminChangeError = 'As senhas novas não coincidem.';
+    render();
+    return;
+  }
+  state.adminSenha = nova;
+  try{
+    await DOC_REF.update({ adminSenha: nova });
+  }catch(e){
+    console.error('Erro ao salvar nova senha do administrador', e);
+  }
+  state.view = 'adminDashboard';
+  state.adminChangeError = '';
+  render();
+}
+
+function toggleDriverSection(nome){
+  state.openDriverSection = state.openDriverSection === nome ? null : nome;
+  state.descontoErro = '';
+  state.confirmDeleteDescontoId = null;
+  render();
+}
+
+function setPeriodo(idx, periodo){
+  state.periodos[idx] = periodo;
+  render();
+}
+
+async function adicionarDesconto(idx){
+  const m = state.data.motoboys[idx];
+  if(!m) return;
+  const descInput = document.getElementById('descDescricao_' + idx);
+  const valInput = document.getElementById('descValor_' + idx);
+  const descricao = (descInput ? descInput.value : '').trim();
+  const valorStr = (valInput ? valInput.value : '').replace(',', '.').trim();
+  const valor = parseFloat(valorStr);
+  if(!descricao){
+    state.descontoErro = 'Digite uma descrição para o desconto (ex: sangria).';
+    render();
+    return;
+  }
+  if(isNaN(valor) || valor <= 0){
+    state.descontoErro = 'Digite um valor de desconto válido.';
+    render();
+    return;
+  }
+  state.data.descontos.push({ id: uid(), motoboy: m.nome, descricao, valor, data: new Date().toISOString() });
+  await saveData();
+  delete state.descInputs['d_' + idx];
+  delete state.descInputs['v_' + idx];
+  state.descontoErro = '';
+  render();
+}
+
+function askDeleteDesconto(id){
+  state.confirmDeleteDescontoId = id;
+  render();
+}
+
+function cancelDeleteDesconto(){
+  state.confirmDeleteDescontoId = null;
+  render();
+}
+
+async function confirmDeleteDesconto(id){
+  state.data.descontos = state.data.descontos.filter(d => d.id !== id);
+  await saveData();
+  state.confirmDeleteDescontoId = null;
+  render();
+}
+
+function abrirRelatorio(idx){
+  state.relatorio = { idx, periodo: getPeriodo(idx) };
+  state.view = 'adminReport';
+  render();
+}
+
+function fecharRelatorio(){
+  state.relatorio = null;
+  state.view = 'adminDashboard';
+  render();
+}
+
+function setRelatorioPeriodo(periodo){
+  state.relatorio.periodo = periodo;
+  state.periodos[state.relatorio.idx] = periodo;
+  render();
+}
+
+function imprimirRelatorio(){
+  window.print();
+}
+
+// ---------- renderização ----------
+
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){
+    app.innerHTML = '<div class="loading">Carregando...</div>';
+    return;
+  }
+
+  // guarda a posição do cursor do campo ativo, para não o perder
+  // caso a tela precise de ser reconstruída enquanto se escreve
+  const activo = document.activeElement;
+  const activoId = activo && activo.id;
+  const selStart = (activo && typeof activo.selectionStart === 'number') ? activo.selectionStart : null;
+  const selEnd = (activo && typeof activo.selectionEnd === 'number') ? activo.selectionEnd : null;
+
+  if(state.view === 'login') renderLogin(app);
+  else if(state.view === 'driverName') renderDriverName(app);
+  else if(state.view === 'driverSetPassword') renderDriverSetPassword(app);
+  else if(state.view === 'driverLoginPassword') renderDriverLoginPassword(app);
+  else if(state.view === 'driverChangePassword') renderDriverChangePassword(app);
+  else if(state.view === 'driverDashboard') renderDriverDashboard(app);
+  else if(state.view === 'adminLogin') renderAdminLogin(app);
+  else if(state.view === 'adminChangePassword') renderAdminChangePassword(app);
+  else if(state.view === 'adminDashboard') renderAdminDashboard(app);
+  else if(state.view === 'adminReport') renderAdminReport(app);
+
+  if(activoId){
+    const el = document.getElementById(activoId);
+    if(el && el !== document.activeElement){
+      el.focus();
+      if(selStart !== null && el.setSelectionRange){
+        try{ el.setSelectionRange(selStart, selEnd); }catch(e){}
+      }
+    }
+  }
+}
+
+function renderLogin(app){
+  app.innerHTML = `
+    <div>
+      <div class="brand">Registo de Entregas</div>
+      <div class="brand-sub">Controle de entregas dos motoboys da hamburgueria</div>
+      <button class="tile tile-driver" onclick="goDriverName()">
+        Sou entregador
+        <small>Registar as minhas entregas</small>
+      </button>
+      <button class="tile tile-admin" onclick="goAdminLogin()">
+        Sou administrador
+        <small>Ver entregas de todos os entregadores</small>
+      </button>
+    </div>
+    <div class="footer-note">Os dados ficam guardados e são partilhados entre todos os dispositivos que abrirem esta aplicação.</div>
+  `;
+}
+
+function renderDriverName(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="goLogin()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Perfil do entregador</div>
+      <div class="brand-sub">Digite o seu nome. Se já tiver um perfil, basta escrever o mesmo nome para continuar.</div>
+      <div class="card">
+        <label for="driverNameInput">Nome</label>
+        <input type="text" id="driverNameInput" placeholder="Ex: Carlos" value="${escapeHtml(state.driverInput)}" onkeydown="if(event.key==='Enter') submitDriverName()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitDriverName()">Entrar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('driverNameInput').focus();
+}
+
+function renderDriverSetPassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="goDriverName()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Criar senha</div>
+      <div class="brand-sub">Olá, ${escapeHtml(state.driverPendingName)}! Crie uma senha para proteger o seu perfil. Só será pedida de novo no dia seguinte.</div>
+      <div class="card">
+        <label for="novaSenhaInput">Senha</label>
+        <input type="password" id="novaSenhaInput" placeholder="Mínimo 4 caracteres">
+        <label for="confirmSenhaInput">Confirmar senha</label>
+        <input type="password" id="confirmSenhaInput" placeholder="Repita a senha" onkeydown="if(event.key==='Enter') submitNewPassword()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitNewPassword()">Criar perfil</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('novaSenhaInput').focus();
+}
+
+function renderDriverLoginPassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="goDriverName()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Olá, ${escapeHtml(state.driverPendingName)}</div>
+      <div class="brand-sub">Digite a sua senha para entrar. Amanhã ela será pedida de novo.</div>
+      <div class="card">
+        <label for="senhaLoginInput">Senha</label>
+        <input type="password" id="senhaLoginInput" placeholder="••••" onkeydown="if(event.key==='Enter') submitLoginPassword()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitLoginPassword()">Entrar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('senhaLoginInput').focus();
+}
+
+function renderDriverChangePassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="cancelChangePassword()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Alterar senha</div>
+      <div class="brand-sub">Confirme a senha atual e escolha a nova.</div>
+      <div class="card">
+        <label for="changeAtualInput">Senha atual</label>
+        <input type="password" id="changeAtualInput" placeholder="••••">
+        <label for="changeNovaInput">Nova senha</label>
+        <input type="password" id="changeNovaInput" placeholder="Mínimo 4 caracteres">
+        <label for="changeConfirmaInput">Confirmar nova senha</label>
+        <input type="password" id="changeConfirmaInput" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter') submitChangePassword()">
+        ${state.changeError ? `<div class="error-msg">${state.changeError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitChangePassword()">Guardar nova senha</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('changeAtualInput').focus();
+}
+
+function renderDriverDashboard(app){
+  const minhas = state.data.entregas
+    .filter(e => e.motoboy === state.currentDriver)
+    .sort((a,b) => new Date(b.horario) - new Date(a.horario));
+  const total = minhas.reduce((s,e) => s + e.valor, 0);
+
+  let listaHtml = '';
+  if(minhas.length === 0){
+    listaHtml = '<div class="empty">Ainda não há entregas registadas.</div>';
+  }else{
+    listaHtml = minhas.map(e => renderEntregaItem(e)).join('');
+  }
+
+  app.innerHTML = `
+    <div>
+      <div class="topbar">
+        <h1>Olá, ${escapeHtml(state.currentDriver)}</h1>
+        <div style="display:flex; gap:14px; align-items:center;">
+          <button class="btn-ghost" onclick="goChangePassword()">senha</button>
+          <button class="btn-ghost" onclick="goLogin()">sair</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><b>${minhas.length}</b><span>entregas</span></div>
+        <div class="stat"><b>${formatMoney(total)}</b><span>a receber</span></div>
+      </div>
+
+      <div class="card">
+        <label>Nome do cliente</label>
+        <input type="text" id="clienteInput" placeholder="Ex: Maria Silva" value="${escapeHtml(state.novoCliente)}" onkeydown="if(event.key==='Enter') enviarEntrega()">
+        <label>Tipo de entrega</label>
+        <div class="type-row">
+          <div class="type-btn ${state.novoTipo==='cidade' ? 'active-cidade' : ''}" onclick="setNovoTipo('cidade')">
+            Cidade<span>${formatMoney(VALORES.cidade)}</span>
+          </div>
+          <div class="type-btn ${state.novoTipo==='estrada' ? 'active-estrada' : ''}" onclick="setNovoTipo('estrada')">
+            Estrada<span>${formatMoney(VALORES.estrada)}</span>
+          </div>
+        </div>
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="enviarEntrega()">Enviar entrega</button>
+      </div>
+
+      <h2 style="font-size:15px; margin: 4px 0 10px;">Minhas entregas</h2>
+      ${listaHtml}
+    </div>
+  `;
+  const ci = document.getElementById('clienteInput');
+  if(ci) ci.focus();
+}
+
+function renderEntregaItem(e){
+  const isEditing = state.editingId === e.id;
+  const isConfirmingDelete = state.confirmDeleteId === e.id;
+
+  if(isEditing){
+    return `
+      <div class="entrega-item">
+        <label>Cliente</label>
+        <input type="text" id="editClienteInput_${e.id}" value="${escapeHtml(state.editCliente)}">
+        <label>Tipo de entrega</label>
+        <div class="type-row">
+          <div class="type-btn ${state.editTipo==='cidade' ? 'active-cidade' : ''}" onclick="setEditTipo('cidade')">
+            Cidade<span>${formatMoney(VALORES.cidade)}</span>
+          </div>
+          <div class="type-btn ${state.editTipo==='estrada' ? 'active-estrada' : ''}" onclick="setEditTipo('estrada')">
+            Estrada<span>${formatMoney(VALORES.estrada)}</span>
+          </div>
+        </div>
+        <div class="entrega-actions">
+          <button class="mini-btn mini-edit" onclick="salvarEdit('${e.id}')">Guardar</button>
+          <button class="mini-btn mini-del" onclick="cancelEdit()">Cancelar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="entrega-item">
+      <div class="entrega-top">
+        <div>
+          <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
+          <div class="entrega-meta">${formatHorario(e.horario)}</div>
+        </div>
+        <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
+      </div>
+      <div class="entrega-valor">${formatMoney(e.valor)}</div>
+      <div class="entrega-actions">
+        ${isConfirmingDelete ? `
+          <button class="mini-btn mini-confirm" onclick="confirmDelete('${e.id}')">Confirmar apagar</button>
+          <button class="mini-btn mini-del" onclick="cancelDelete()">Cancelar</button>
+        ` : `
+          <button class="mini-btn mini-edit" onclick="startEdit('${e.id}')">Ajustar</button>
+          <button class="mini-btn mini-del" onclick="askDelete('${e.id}')">Apagar</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminLogin(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="goLogin()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Acesso do administrador</div>
+      <div class="brand-sub">Digite a senha para ver as entregas de todos os entregadores.</div>
+      <div class="card">
+        <label for="adminPasswordInput">Senha</label>
+        <input type="password" id="adminPasswordInput" placeholder="••••" onkeydown="if(event.key==='Enter') submitAdminPassword()">
+        ${state.adminError ? `<div class="error-msg">${state.adminError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitAdminPassword()">Entrar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('adminPasswordInput').focus();
+}
+
+function renderAdminChangePassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="btn-ghost" onclick="cancelAdminChangePassword()">&larr; voltar</button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Alterar senha do administrador</div>
+      <div class="brand-sub">Confirme a senha atual e escolha a nova.</div>
+      <div class="card">
+        <label for="adminChangeAtualInput">Senha atual</label>
+        <input type="password" id="adminChangeAtualInput" placeholder="••••">
+        <label for="adminChangeNovaInput">Nova senha</label>
+        <input type="password" id="adminChangeNovaInput" placeholder="Mínimo 4 caracteres">
+        <label for="adminChangeConfirmaInput">Confirmar nova senha</label>
+        <input type="password" id="adminChangeConfirmaInput" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter') submitAdminChangePassword()">
+        ${state.adminChangeError ? `<div class="error-msg">${state.adminChangeError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitAdminChangePassword()">Guardar nova senha</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('adminChangeAtualInput').focus();
+}
+
+function renderAdminDashboard(app){
+  const motoboys = state.data.motoboys;
+  const todas = state.data.entregas;
+  const todosDescontos = state.data.descontos;
+  const totalBrutoGeral = todas.reduce((s,e) => s + e.valor, 0);
+  const totalDescontosGeral = todosDescontos.reduce((s,d) => s + d.valor, 0);
+  const totalLiquidoGeral = totalBrutoGeral - totalDescontosGeral;
+
+  let corpo = '';
+  if(motoboys.length === 0){
+    corpo = '<div class="empty">Ainda não há entregadores registados.</div>';
+  }else{
+    corpo = motoboys.map((m, idx) => {
+      const nome = m.nome;
+      const entregasTodas = todas
+        .filter(e => e.motoboy === nome)
+        .sort((a,b) => new Date(b.horario) - new Date(a.horario));
+      const descontosTodos = todosDescontos
+        .filter(d => d.motoboy === nome)
+        .sort((a,b) => new Date(b.data) - new Date(a.data));
+      const totalBrutoAll = entregasTodas.reduce((s,e) => s + e.valor, 0);
+      const totalDescontosAll = descontosTodos.reduce((s,d) => s + d.valor, 0);
+      const totalLiquidoAll = totalBrutoAll - totalDescontosAll;
+
+      const aberto = state.openDriverSection === nome;
+      const periodo = getPeriodo(idx);
+      const entregasPeriodo = filterByPeriod(entregasTodas, periodo, 'horario');
+      const descontosPeriodo = filterByPeriod(descontosTodos, periodo, 'data');
+      const totalBrutoPeriodo = entregasPeriodo.reduce((s,e) => s + e.valor, 0);
+      const totalDescontosPeriodo = descontosPeriodo.reduce((s,d) => s + d.valor, 0);
+      const totalLiquidoPeriodo = totalBrutoPeriodo - totalDescontosPeriodo;
+
+      let corpoAberto = '';
+      if(aberto){
+        const itensEntregas = entregasPeriodo.length === 0
+          ? '<div class="empty">Sem entregas neste período.</div>'
+          : entregasPeriodo.map(e => `
+              <div class="entrega-item">
+                <div class="entrega-top">
+                  <div>
+                    <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
+                    <div class="entrega-meta">${formatHorario(e.horario)}</div>
+                  </div>
+                  <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
+                </div>
+                <div class="entrega-valor">${formatMoney(e.valor)}</div>
+              </div>
+            `).join('');
+
+        const itensDescontos = descontosTodos.length === 0
+          ? '<div class="empty">Nenhum desconto lançado.</div>'
+          : descontosTodos.map(d => `
+              <div class="entrega-item">
+                <div class="entrega-top">
+                  <div>
+                    <div class="entrega-cliente">${escapeHtml(d.descricao)}</div>
+                    <div class="entrega-meta">${formatHorario(d.data)}</div>
+                  </div>
+                  <span class="badge badge-desconto">Desconto</span>
+                </div>
+                <div class="entrega-valor" style="color: var(--tomato);">- ${formatMoney(d.valor)}</div>
+                <div class="entrega-actions">
+                  ${state.confirmDeleteDescontoId === d.id ? `
+                    <button class="mini-btn mini-confirm" onclick="confirmDeleteDesconto('${d.id}')">Confirmar remover</button>
+                    <button class="mini-btn mini-del" onclick="cancelDeleteDesconto()">Cancelar</button>
+                  ` : `
+                    <button class="mini-btn mini-del" onclick="askDeleteDesconto('${d.id}')">Remover</button>
+                  `}
+                </div>
+              </div>
+            `).join('');
+
+        corpoAberto = `
+          <div class="driver-body">
+            <div class="period-row">
+              <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setPeriodo(${idx},'dia')">Diário</div>
+              <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setPeriodo(${idx},'semana')">Semanal</div>
+              <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setPeriodo(${idx},'mes')">Mensal</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat"><b>${formatMoney(totalBrutoPeriodo)}</b><span>bruto no período</span></div>
+              <div class="stat"><b>-${formatMoney(totalDescontosPeriodo)}</b><span>descontos</span></div>
+              <div class="stat"><b>${formatMoney(totalLiquidoPeriodo)}</b><span>a pagar</span></div>
+            </div>
+            <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirRelatorio(${idx})">Gerar relatório</button>
+
+            <div class="section-title">Entregas no período selecionado</div>
+            ${itensEntregas}
+
+            <div class="section-title">Lançar desconto (ex: sangria)</div>
+            <label>Descrição</label>
+            <input type="text" id="descDescricao_${idx}" placeholder="Ex: Sangria do dia" value="${escapeHtml(state.descInputs['d_'+idx] || '')}">
+            <label>Valor (R$)</label>
+            <input type="text" id="descValor_${idx}" placeholder="Ex: 20" inputmode="decimal" value="${escapeHtml(state.descInputs['v_'+idx] || '')}">
+            ${state.descontoErro ? `<div class="error-msg">${state.descontoErro}</div>` : ''}
+            <button class="btn btn-secondary" onclick="adicionarDesconto(${idx})">Adicionar desconto</button>
+
+            <div class="section-title">Descontos lançados</div>
+            ${itensDescontos}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="driver-section">
+          <div class="driver-header" onclick="toggleDriverSection('${escapeAttr(nome)}')">
+            <b>${escapeHtml(nome)} · ${entregasTodas.length} entrega${entregasTodas.length===1?'':'s'}</b>
+            <span class="amount">${formatMoney(totalLiquidoAll)}</span>
+          </div>
+          ${corpoAberto}
+        </div>
+      `;
+    }).join('');
+  }
+
+  app.innerHTML = `
+    <div>
+      <div class="topbar">
+        <h1>Painel do administrador</h1>
+        <div style="display:flex; gap:14px; align-items:center;">
+          <button class="btn-ghost" onclick="goAdminChangePassword()">senha</button>
+          <button class="btn-ghost" onclick="goLogin()">sair</button>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b>${motoboys.length}</b><span>entregadores</span></div>
+        <div class="stat"><b>${todas.length}</b><span>entregas</span></div>
+        <div class="stat"><b>${formatMoney(totalLiquidoGeral)}</b><span>total a pagar</span></div>
+      </div>
+      ${corpo}
+    </div>
+  `;
+}
+
+function renderAdminReport(app){
+  const idx = state.relatorio.idx;
+  const m = state.data.motoboys[idx];
+  if(!m){
+    fecharRelatorio();
+    return;
+  }
+  const periodo = state.relatorio.periodo;
+
+  const entregasM = state.data.entregas.filter(e => e.motoboy === m.nome);
+  const descontosM = state.data.descontos.filter(d => d.motoboy === m.nome);
+  const entregasP = filterByPeriod(entregasM, periodo, 'horario').sort((a,b) => new Date(a.horario) - new Date(b.horario));
+  const descontosP = filterByPeriod(descontosM, periodo, 'data').sort((a,b) => new Date(a.data) - new Date(b.data));
+
+  const totalBruto = entregasP.reduce((s,e) => s + e.valor, 0);
+  const totalDesc = descontosP.reduce((s,d) => s + d.valor, 0);
+  const totalLiquido = totalBruto - totalDesc;
+
+  const linhasEntregas = entregasP.length === 0
+    ? `<tr><td colspan="4" style="color:var(--ink-soft);">Nenhuma entrega neste período.</td></tr>`
+    : entregasP.map(e => `
+        <tr>
+          <td>${formatHorario(e.horario)}</td>
+          <td>${escapeHtml(e.cliente)}</td>
+          <td>${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</td>
+          <td>${formatMoney(e.valor)}</td>
+        </tr>
+      `).join('');
+
+  const linhasDescontos = descontosP.length === 0
+    ? `<tr><td colspan="3" style="color:var(--ink-soft);">Nenhum desconto neste período.</td></tr>`
+    : descontosP.map(d => `
+        <tr>
+          <td>${formatHorario(d.data)}</td>
+          <td>${escapeHtml(d.descricao)}</td>
+          <td>- ${formatMoney(d.valor)}</td>
+        </tr>
+      `).join('');
+
+  app.innerHTML = `
+    <div>
+      <div class="no-print" style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px;">
+        <button class="btn-ghost" onclick="fecharRelatorio()">&larr; voltar</button>
+        <button class="btn-ghost" onclick="imprimirRelatorio()">Imprimir / guardar PDF</button>
+      </div>
+
+      <div class="period-row no-print">
+        <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setRelatorioPeriodo('dia')">Diário</div>
+        <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setRelatorioPeriodo('semana')">Semanal</div>
+        <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setRelatorioPeriodo('mes')">Mensal</div>
+      </div>
+
+      <div class="print-area card">
+        <div class="brand" style="font-size:20px;">Relatório de entregas</div>
+        <div class="brand-sub" style="margin-bottom:4px;">Entregador: <strong>${escapeHtml(m.nome)}</strong></div>
+        <div class="brand-sub" style="margin-bottom:20px;">${periodoLabel(periodo)}</div>
+
+        <div class="section-title">Entregas</div>
+        <table class="report-table">
+          <thead><tr><th>Data/hora</th><th>Cliente</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <tbody>${linhasEntregas}</tbody>
+        </table>
+
+        <div class="section-title">Descontos</div>
+        <table class="report-table">
+          <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead>
+          <tbody>${linhasDescontos}</tbody>
+        </table>
+
+        <div class="report-total-row"><span>Total bruto</span><span>${formatMoney(totalBruto)}</span></div>
+        <div class="report-total-row"><span>Total de descontos</span><span>- ${formatMoney(totalDesc)}</span></div>
+        <div class="report-total-row net"><span>Total a pagar</span><span>${formatMoney(totalLiquido)}</span></div>
+
+        <div class="footer-note" style="text-align:left; margin-top:20px;">Gerado em ${formatHorario(new Date().toISOString())}</div>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escapeAttr(str){ return escapeHtml(str).replace(/`/g, '&#96;'); }
+
+// captura o valor digitado enquanto o utilizador escreve, para não se perder ao voltar a renderizar
+document.addEventListener('input', function(ev){
+  const id = ev.target.id;
+  if(id === 'driverNameInput') state.driverInput = ev.target.value;
+  if(id === 'clienteInput') state.novoCliente = ev.target.value;
+  if(id && id.startsWith('editClienteInput_')) state.editCliente = ev.target.value;
+  if(id && id.startsWith('descDescricao_')) state.descInputs['d_' + id.split('_')[1]] = ev.target.value;
+  if(id && id.startsWith('descValor_')) state.descInputs['v_' + id.split('_')[1]] = ev.target.value;
+});
+
+(async function init(){
+  await inicializarFirebase();
+})();
+</script>
+</body>
+</html>
