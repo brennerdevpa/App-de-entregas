@@ -486,6 +486,16 @@ function limparSessaoMotorista(){
   try{ localStorage.removeItem('appmotoboys_motorista'); }catch(e){}
 }
 
+// Guarda apenas qual perfil já foi confirmado neste aparelho. A sessão diária
+// continua separada e é removida ao sair ou ao mudar de dia.
+function salvarPerfilConhecido(nome){
+  try{ localStorage.setItem('appmotoboys_perfil_conhecido', nome); }catch(e){}
+}
+
+function perfilConhecido(){
+  try{ return localStorage.getItem('appmotoboys_perfil_conhecido'); }catch(e){ return null; }
+}
+
 function sessaoMotoristaSalva(){
   try{ return localStorage.getItem('appmotoboys_motorista'); }catch(e){ return null; }
 }
@@ -541,6 +551,12 @@ async function submitDriverName(){
   const existente = state.data.motoboys.find(m => m.nome.toLowerCase() === nome.toLowerCase());
   state.driverPendingName = existente ? existente.nome : nome;
 
+  // Um perfil já autenticado neste aparelho pode voltar a entrar sem senha.
+  if(existente && perfilConhecido() && existente.nome.toLowerCase() === perfilConhecido().toLowerCase()){
+    entrarNoPerfil(existente.nome);
+    return;
+  }
+
   if(!existente || !existente.senha){
     state.view = 'driverSetPassword';
     state.driverError = '';
@@ -550,6 +566,21 @@ async function submitDriverName(){
 
   state.view = 'driverLoginPassword';
   state.driverError = '';
+  render();
+}
+
+function selecionarMotorista(idx){
+  const motorista = state.data.motoboys[idx];
+  if(!motorista) return;
+  state.driverInput = motorista.nome;
+  submitDriverName();
+}
+
+function entrarNoPerfil(nome){
+  state.currentDriver = nome;
+  state.view = 'driverDashboard';
+  state.driverError = '';
+  salvarSessaoMotorista(nome);
   render();
 }
 
@@ -573,11 +604,8 @@ async function submitNewPassword(){
     state.data.motoboys.push({ nome: state.driverPendingName, senha: p1 });
   }
   await saveData();
-  state.currentDriver = state.driverPendingName;
-  state.view = 'driverDashboard';
-  state.driverError = '';
-  salvarSessaoMotorista(state.currentDriver);
-  render();
+  salvarPerfilConhecido(state.driverPendingName);
+  entrarNoPerfil(state.driverPendingName);
 }
 
 async function submitLoginPassword(){
@@ -585,11 +613,8 @@ async function submitLoginPassword(){
   const senha = inp ? inp.value : '';
   const m = state.data.motoboys.find(x => x.nome.toLowerCase() === state.driverPendingName.toLowerCase());
   if(m && m.senha === senha){
-    state.currentDriver = m.nome;
-    state.view = 'driverDashboard';
-    state.driverError = '';
-    salvarSessaoMotorista(state.currentDriver);
-    render();
+    salvarPerfilConhecido(m.nome);
+    entrarNoPerfil(m.nome);
   }else{
     state.driverError = 'Senha incorreta.';
     render();
@@ -919,20 +944,33 @@ function renderLogin(app){
 }
 
 function renderDriverName(app){
+  const conhecido = (perfilConhecido() || '').toLowerCase();
+  const perfis = state.data.motoboys
+    .map((m, idx) => ({ m, idx }))
+    .sort((a, b) => a.m.nome.localeCompare(b.m.nome, 'pt-BR'))
+    .map(({ m, idx }) => {
+      const ehConhecido = m.nome.toLowerCase() === conhecido;
+      return `<button class="tile ${ehConhecido ? 'tile-driver' : 'tile-admin'}" style="margin-bottom:10px; padding:16px; font-size:16px;" onclick="selecionarMotorista(${idx})">
+        ${escapeHtml(m.nome)}
+        <small>${ehConhecido ? 'Este é o meu perfil — entrar sem senha' : 'Toque para entrar com senha'}</small>
+      </button>`;
+    }).join('');
+
   app.innerHTML = `
     <div>
       <button class="btn-ghost" onclick="goLogin()">&larr; voltar</button>
       <div class="brand" style="font-size:22px; margin-top:10px;">Perfil do entregador</div>
-      <div class="brand-sub">Digite o seu nome. Se já tiver um perfil, basta escrever o mesmo nome para continuar.</div>
+      <div class="brand-sub">Escolha o seu perfil. Neste aparelho, o último perfil confirmado entra sem pedir senha.</div>
+      ${perfis ? `<div style="margin-bottom:18px;">${perfis}</div>` : '<div class="empty">Ainda não há entregadores registados.</div>'}
       <div class="card">
-        <label for="driverNameInput">Nome</label>
-        <input type="text" id="driverNameInput" placeholder="Ex: Carlos" value="${escapeHtml(state.driverInput)}" onkeydown="if(event.key==='Enter') submitDriverName()">
+        <label for="driverNameInput">Novo entregador</label>
+        <input type="text" id="driverNameInput" placeholder="Digite um nome novo" value="${escapeHtml(state.driverInput)}" onkeydown="if(event.key==='Enter') submitDriverName()">
         ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
-        <button class="btn btn-primary" onclick="submitDriverName()">Entrar</button>
+        <button class="btn btn-primary" onclick="submitDriverName()">Criar perfil</button>
       </div>
     </div>
   `;
-  document.getElementById('driverNameInput').focus();
+  if(state.data.motoboys.length === 0) document.getElementById('driverNameInput').focus();
 }
 
 function renderDriverSetPassword(app){
