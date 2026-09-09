@@ -369,7 +369,8 @@ let state = {
   descInputs: {},
   confirmDeleteDescontoId: null,
   relatorio: null,
-  loaded: false
+  loaded: false,
+  dataReady: false
 };
 
 function todayStr(){
@@ -478,6 +479,7 @@ function normalizarDados(){
   state.data.descontos = state.data.descontos
     .filter(d => d && d.id && d.motoboy)
     .map(d => ({ ...d, valor: Number(d.valor) || 0 }));
+  state.adminSenha = state.data.adminSenha || '1234';
 }
 
 let inicializacaoConcluida = false;
@@ -517,10 +519,12 @@ async function inicializarFirebase(){
   if(snap && snap.exists){
     state.data = snap.data();
     normalizarDados();
+    state.dataReady = true;
     render();
   }else{
     try{
       await DOC_REF.set(state.data);
+      state.dataReady = true;
     }catch(e){
       console.error('Erro ao criar documento no Firestore', e);
       state.saveError = 'Não foi possível iniciar os dados no Firebase. Verifique a ligação e as permissões do Firestore.';
@@ -550,6 +554,7 @@ function iniciarListener(){
       if(JSON.stringify(novos) !== atual){
         state.data = novos;
         normalizarDados();
+        state.dataReady = true;
         render();
       }
     }
@@ -965,13 +970,15 @@ function goAdminLogin(){
   render();
 }
 
-async function submitAdminPassword(){
+function submitAdminPassword(){
   const inp = document.getElementById('adminPasswordInput');
   const senha = inp ? inp.value : '';
-  const snap = await DOC_REF.get();
-  const dados = snap.exists ? snap.data() : {};
-  const senhaAdmin = dados.adminSenha || '1234';
-  state.adminSenha = senhaAdmin;
+  if(!state.dataReady){
+    state.adminError = 'Aguarde os dados terminarem de carregar.';
+    render();
+    return;
+  }
+  const senhaAdmin = state.adminSenha;
   if(senha === senhaAdmin){
     limparSessaoMotorista();
     salvarSessaoAdmin();
