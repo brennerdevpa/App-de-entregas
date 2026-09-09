@@ -441,6 +441,7 @@ async function inicializarFirebase(){
   }
   inicializacaoConcluida = true;
   restauraSessaoMotorista();
+  restauraSessaoAdmin();
 }
 
 function iniciarListener(){
@@ -500,6 +501,29 @@ function sessaoMotoristaSalva(){
   try{ return localStorage.getItem('appmotoboys_motorista'); }catch(e){ return null; }
 }
 
+function salvarSessaoAdmin(){
+  try{ localStorage.setItem('appmotoboys_admin', JSON.stringify({ data: todayStr() })); }catch(e){}
+}
+
+function limparSessaoAdmin(){
+  try{ localStorage.removeItem('appmotoboys_admin'); }catch(e){}
+}
+
+function restauraSessaoAdmin(){
+  // Se houver uma sessão válida de entregador, ela tem prioridade nesta aba.
+  if(state.view === 'driverDashboard') return;
+  let sessao;
+  try{ sessao = JSON.parse(localStorage.getItem('appmotoboys_admin')); }catch(e){ limparSessaoAdmin(); return; }
+  if(!sessao) return;
+  if(sessao.data !== todayStr()){
+    limparSessaoAdmin();
+    return;
+  }
+  state.view = 'adminDashboard';
+  state.adminError = '';
+  render();
+}
+
 function restauraSessaoMotorista(){
   const sessao = sessaoMotoristaSalva();
   if(!sessao) return;
@@ -523,6 +547,7 @@ function restauraSessaoMotorista(){
 
 function goLogin(){
   limparSessaoMotorista();
+  limparSessaoAdmin();
   state.view = 'login';
   state.driverInput = '';
   state.driverPendingName = '';
@@ -577,6 +602,7 @@ function selecionarMotorista(idx){
 }
 
 function entrarNoPerfil(nome){
+  limparSessaoAdmin();
   state.currentDriver = nome;
   state.view = 'driverDashboard';
   state.driverError = '';
@@ -755,6 +781,8 @@ async function submitAdminPassword(){
   const senhaAdmin = dados.adminSenha || '1234';
   state.adminSenha = senhaAdmin;
   if(senha === senhaAdmin){
+    limparSessaoMotorista();
+    salvarSessaoAdmin();
     state.view = 'adminDashboard';
     state.adminError = '';
     render();
