@@ -267,13 +267,18 @@ const FIREBASE_CONFIG = {
   appId: "1:138452699945:web:09e5b28d1d405cb599c538"
 };
 
-firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.firestore();
-db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-const auth = firebase.auth();
-
-const DOC_REF = db.collection('app').doc('estado');
-let unsub = null;
+let db, auth, DOC_REF, unsub = null;
+let firebaseOk = false;
+try{
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  auth = firebase.auth();
+  DOC_REF = db.collection('app').doc('estado');
+  firebaseOk = true;
+}catch(e){
+  console.error('Erro ao inicializar Firebase', e);
+}
 
 const VALORES = { cidade: 3, estrada: 6 };
 
@@ -298,6 +303,7 @@ let state = {
   openDriverSection: null,
   periodos: {},
   descontoErro: '',
+  saveError: '',
   descInputs: {},
   confirmDeleteDescontoId: null,
   relatorio: null,
@@ -312,7 +318,8 @@ function todayStr(){
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 function formatMoney(v){
-  return 'R$ ' + v.toFixed(2).replace('.', ',');
+  const valor = Number(v);
+  return 'R$ ' + (Number.isFinite(valor) ? valor : 0).toFixed(2).replace('.', ',');
 }
 
 function formatHorario(iso){
@@ -379,36 +386,67 @@ function normalizarDados(){
   if(!state.data.entregas) state.data.entregas = [];
   if(!state.data.descontos) state.data.descontos = [];
   state.data.motoboys = state.data.motoboys.map(m => typeof m === 'string' ? { nome: m, senha: null } : m);
+  state.data.entregas = state.data.entregas
+    .filter(e => e && e.id && e.motoboy && e.cliente)
+    .map(e => ({ ...e, valor: Number(e.valor) || VALORES[e.tipo] || 0 }));
+  state.data.descontos = state.data.descontos
+    .filter(d => d && d.id && d.motoboy)
+    .map(d => ({ ...d, valor: Number(d.valor) || 0 }));
 }
 
+let inicializacaoConcluida = false;
+
 async function inicializarFirebase(){
+  state.loaded = true;
+  render();
+
+  if(!firebaseOk){
+    document.getElementById('app').innerHTML = '<div class="error-msg" style="margin:40px auto; max-width:400px;">Falha ao ligar ao Firebase. Verifique a consola (F12) e a sua ligação à internet.</div>';
+    return;
+  }
+
   try{
     await auth.signInAnonymously();
   }catch(e){
     console.error('Erro ao autenticar anonimamente', e);
   }
 
-  try{
-    const snap = await DOC_REF.get();
-    if(snap.exists){
-      state.data = snap.data();
-    }else{
-      await DOC_REF.set(state.data);
-    }
-    normalizarDados();
-  }catch(e){
-    console.error('Erro ao ler dados do Firestore', e);
-    state.data = { motoboys: [], entregas: [], descontos: [] };
-  }
-
-  state.loaded = true;
-  render();
   iniciarListener();
+  const options = { source: 'cache' };
+  let snap = null;
+  try{
+    snap = await DOC_REF.get(options);
+  }catch(e){
+    console.error('Erro no cache do Firestore', e);
+  }
+  if(!snap || !snap.exists){
+    try{
+      snap = await DOC_REF.get();
+    }catch(e){
+      console.error('Erro ao ler dados do Firestore', e);
+    }
+  }
+  if(snap && snap.exists){
+    state.data = snap.data();
+    normalizarDados();
+    render();
+  }else{
+    try{
+      await DOC_REF.set(state.data);
+    }catch(e){
+      console.error('Erro ao criar documento no Firestore', e);
+      state.saveError = 'Não foi possível iniciar os dados no Firebase. Verifique a ligação e as permissões do Firestore.';
+      render();
+    }
+  }
+  inicializacaoConcluida = true;
+  restauraSessaoMotorista();
 }
 
 function iniciarListener(){
   if(unsub) unsub();
-  unsub = onSnapshot(DOC_REF, snap => {
+  // No SDK "compat", o listener pertence à referência do documento.
+  unsub = DOC_REF.onSnapshot(snap => {
     if(snap.exists){
       const novos = snap.data();
       const atual = JSON.stringify(state.data);
@@ -420,20 +458,61 @@ function iniciarListener(){
     }
   }, err => {
     console.error('Erro no listener Firestore', err);
+    state.saveError = 'A sincronização com o Firebase falhou. Verifique a ligação e tente recarregar a página.';
+    render();
   });
 }
 
 async function saveData(){
   try{
     await DOC_REF.set(state.data);
+    state.saveError = '';
   }catch(e){
     console.error('Erro ao salvar no Firestore', e);
+    state.saveError = 'Não foi possível guardar a alteração. Verifique a ligação e tente novamente.';
+    render();
   }
 }
 
 // ---------- ações ----------
 
+function salvarSessaoMotorista(nome){
+  try{
+    localStorage.setItem('appmotoboys_motorista', JSON.stringify({ nome, data: todayStr() }));
+  }catch(e){}
+}
+
+function limparSessaoMotorista(){
+  try{ localStorage.removeItem('appmotoboys_motorista'); }catch(e){}
+}
+
+function sessaoMotoristaSalva(){
+  try{ return localStorage.getItem('appmotoboys_motorista'); }catch(e){ return null; }
+}
+
+function restauraSessaoMotorista(){
+  const sessao = sessaoMotoristaSalva();
+  if(!sessao) return;
+  let dados;
+  try{ dados = JSON.parse(sessao); }catch(e){ limparSessaoMotorista(); return; }
+  if(!dados.nome || dados.data !== todayStr()){
+    limparSessaoMotorista();
+    return;
+  }
+  const nome = dados.nome;
+  const m = state.data.motoboys.find(x => x.nome.toLowerCase() === nome.toLowerCase());
+  if(m){
+    state.currentDriver = m.nome;
+    state.view = 'driverDashboard';
+    state.driverError = '';
+    render();
+  }else{
+    limparSessaoMotorista();
+  }
+}
+
 function goLogin(){
+  limparSessaoMotorista();
   state.view = 'login';
   state.driverInput = '';
   state.driverPendingName = '';
@@ -497,6 +576,7 @@ async function submitNewPassword(){
   state.currentDriver = state.driverPendingName;
   state.view = 'driverDashboard';
   state.driverError = '';
+  salvarSessaoMotorista(state.currentDriver);
   render();
 }
 
@@ -508,6 +588,7 @@ async function submitLoginPassword(){
     state.currentDriver = m.nome;
     state.view = 'driverDashboard';
     state.driverError = '';
+    salvarSessaoMotorista(state.currentDriver);
     render();
   }else{
     state.driverError = 'Senha incorreta.';
@@ -804,6 +885,10 @@ function render(){
   else if(state.view === 'adminDashboard') renderAdminDashboard(app);
   else if(state.view === 'adminReport') renderAdminReport(app);
 
+  if(state.saveError){
+    app.insertAdjacentHTML('afterbegin', `<div class="error-msg">${escapeHtml(state.saveError)}</div>`);
+  }
+
   if(activoId){
     const el = document.getElementById(activoId);
     if(el && el !== document.activeElement){
@@ -1095,9 +1180,9 @@ function renderAdminDashboard(app){
               </div>
             `).join('');
 
-        const itensDescontos = descontosTodos.length === 0
+        const itensDescontos = descontosPeriodo.length === 0
           ? '<div class="empty">Nenhum desconto lançado.</div>'
-          : descontosTodos.map(d => `
+          : descontosPeriodo.map(d => `
               <div class="entrega-item">
                 <div class="entrega-top">
                   <div>
@@ -1143,7 +1228,7 @@ function renderAdminDashboard(app){
             ${state.descontoErro ? `<div class="error-msg">${state.descontoErro}</div>` : ''}
             <button class="btn btn-secondary" onclick="adicionarDesconto(${idx})">Adicionar desconto</button>
 
-            <div class="section-title">Descontos lançados</div>
+            <div class="section-title">Descontos no período selecionado</div>
             ${itensDescontos}
           </div>
         `;
