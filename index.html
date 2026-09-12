@@ -271,6 +271,28 @@
     border-radius: 0 0 14px 14px;
     padding: 12px;
   }
+  .driver-preview{
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    padding: 10px;
+    background: #fff;
+  }
+  .preview-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    margin-bottom:6px;
+    background:#fff;
+  }
+  .preview-item:last-child{ margin-bottom:0; }
+  .preview-cliente{ font-weight:700; font-size:13px; }
+  .preview-meta{ font-size:11px; color:var(--ink-soft); white-space:nowrap; }
+  .preview-more{ font-size:11px; color:var(--ink-soft); text-align:center; padding:6px 0 2px; }
   .error-msg{
     background: #fff0ed;
     color: var(--tomato);
@@ -307,20 +329,35 @@
   .alert-control-copy{ flex:1; font-size:12px; line-height:1.45; color:var(--ink-soft); }
   .alert-control-copy b{ display:block; color:var(--ink); font-size:13px; }
   .alert-control .btn{ width:auto; padding:9px 12px; font-size:12px; }
-  .live-alert{ position:fixed; z-index:1000; right:18px; bottom:18px; max-width:330px; padding:15px 18px; border-radius:15px; background:var(--ink); color:#fff; box-shadow:0 18px 42px rgba(21,32,28,.25); font-size:13px; line-height:1.5; animation:alert-in .25s ease-out; }
+  .live-alert{ position:fixed; z-index:1000; left:14px; right:14px; bottom:14px; margin:0 auto; max-width:330px; padding:15px 18px; border-radius:15px; background:var(--ink); color:#fff; box-shadow:0 18px 42px rgba(21,32,28,.25); font-size:13px; line-height:1.5; animation:alert-in .25s ease-out; }
   .live-alert b{ display:block; margin-bottom:2px; }
   @keyframes alert-in{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:translateY(0); } }
   .section-title{ font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 18px 0 8px; text-transform: none; }
   .report-table{ width:100%; border-collapse: collapse; margin-bottom: 10px; }
+  .table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .report-table th, .report-table td{
     text-align:left;
     padding: 8px 6px;
     border-bottom: 1px solid var(--line);
     font-size: 13px;
+    white-space: nowrap;
   }
   .report-table th{ color: var(--ink-soft); font-weight:600; }
   .report-total-row{ display:flex; justify-content: space-between; padding: 10px 6px; font-weight:700; }
   .report-total-row.net{ font-weight:800; font-size: 17px; border-top: 2px solid var(--ink); margin-top: 6px; }
+  .driver-header{ gap:10px; }
+  .driver-header b{ min-width:0; overflow-wrap:anywhere; }
+  button{ touch-action:manipulation; }
+  input, button{ -webkit-tap-highlight-color: transparent; }
+  @media (max-width: 400px){
+    #app{ padding-left:14px; padding-right:14px; }
+    .stat{ padding:12px 8px; }
+    .stat b{ font-size: clamp(13px, 4.6vw, 19px); }
+    .stat span{ font-size:10px; }
+    .stat-row{ gap:6px; }
+    .time-filter{ grid-template-columns:1fr; }
+    .type-btn{ padding:12px 4px; }
+  }
   @media (min-width: 720px){
     #app{ max-width: 780px; padding-top:48px; }
     .stat-row{ gap:14px; }
@@ -331,6 +368,8 @@
     .print-area, .print-area *{ visibility: visible; }
     .print-area{ position: absolute; left:0; top:0; width:100%; padding: 0 10px; }
     .no-print{ display:none !important; }
+    .table-scroll{ overflow:visible; }
+    .report-table th, .report-table td{ white-space:normal; }
   }
 </style>
 </head>
@@ -411,6 +450,10 @@ function formatMoney(v){
 function formatHorario(iso){
   const d = new Date(iso);
   return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function formatHora(iso){
+  return new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
 // ---------- períodos (diário / semanal / mensal) ----------
@@ -789,13 +832,20 @@ function atualizarMiniTela(){
   const entregas = [...state.data.entregas].sort((a,b) => new Date(b.horario) - new Date(a.horario));
   const recentes = entregas.slice(0, 4);
   const itens = recentes.length
-    ? recentes.map(e => `<div class="item"><b>${escapeHtml(e.motoboy)}</b><span>${escapeHtml(e.cliente)} · ${formatMoney(e.valor)}</span><small>${formatHorario(e.horario)}</small></div>`).join('')
+    ? recentes.map(e => `
+      <div class="item ${e.aviso ? 'aviso' : ''}">
+        <b>${escapeHtml(e.motoboy)}${e.aviso ? ' <span class="flag">NA FRENTE</span>' : ''}</b>
+        <span>${escapeHtml(e.cliente)} · ${formatMoney(e.valor)}</span>
+        <small>${formatHorario(e.horario)}</small>
+      </div>`).join('')
     : '<p class="empty">Aguardando entregas…</p>';
   miniTela.document.body.innerHTML = `
     <style>
       *{box-sizing:border-box} body{margin:0;padding:18px;background:#f4f7f5;color:#15201c;font-family:Arial,sans-serif}
       header{display:flex;justify-content:space-between;align-items:start;margin-bottom:16px} h1{font-size:17px;margin:0 0 4px;letter-spacing:-.4px} p{margin:0;color:#71807a;font-size:12px}
       .count{padding:7px 10px;border-radius:10px;background:#b8f35a;font-size:12px;font-weight:700}.item{background:#fff;border:1px solid #e3e9e5;border-radius:12px;padding:11px;margin-bottom:8px}.item b,.item span,.item small{display:block}.item b{font-size:13px}.item span{font-size:12px;margin:3px 0}.item small{color:#71807a;font-size:10px}.empty{padding:25px 0;text-align:center}
+      .flag{color:#e65545;font-size:10px;margin-left:4px;vertical-align:middle}.item.aviso{border-color:#e65545;background:#fff5f3;animation:blink 1s ease-in-out infinite}
+      @keyframes blink{0%,100%{box-shadow:0 0 0 3px rgba(230,85,69,.18)}50%{box-shadow:0 0 0 6px rgba(230,85,69,.45)}}
     </style>
     <header><div><h1>Entregas ao vivo</h1><p>Monitor do administrador</p></div><div class="count">${entregas.length} entregas</div></header>
     ${itens}`;
@@ -1593,13 +1643,29 @@ function renderAdminDashboard(app){
         `;
       }
 
+      let previaHtml = '';
+      if(!aberto && entregasTodas.length){
+        const recentes = entregasTodas.slice(0, 3);
+        previaHtml = `
+          <div class="driver-preview">
+            ${recentes.map(e => `
+              <div class="preview-item ${e.aviso ? 'aviso-frente blink' : ''}">
+                <span class="preview-cliente">${escapeHtml(e.cliente)}</span>
+                <span class="preview-meta">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'} · ${formatHora(e.horario)}${e.aviso ? ' · NA FRENTE' : ''}</span>
+              </div>
+            `).join('')}
+            ${entregasTodas.length > 3 ? `<div class="preview-more">+ ${entregasTodas.length - 3} mais — toque para expandir</div>` : ''}
+          </div>
+        `;
+      }
+
       return `
         <div class="driver-section">
           <div class="driver-header" onclick="toggleDriverSection('${escapeAttr(nome)}')">
             <b>${escapeHtml(nome)} · ${entregasTodas.length} entrega${entregasTodas.length===1?'':'s'}</b>
             <span class="amount">${formatMoney(totalLiquidoAll)}</span>
           </div>
-          ${corpoAberto}
+          ${corpoAberto || previaHtml}
         </div>
       `;
     }).join('');
@@ -1673,7 +1739,7 @@ function renderAdminReport(app){
 
   app.innerHTML = `
     <div>
-      <div class="no-print" style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px;">
+      <div class="no-print" style="display:flex; flex-wrap:wrap; gap:10px; justify-content: space-between; align-items:center; margin-bottom: 14px;">
         <button class="back-btn" onclick="fecharRelatorio()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
         <button class="btn btn-primary report-print-btn" onclick="imprimirRelatorio()" aria-label="Imprimir ou guardar relatório em PDF">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
@@ -1693,16 +1759,16 @@ function renderAdminReport(app){
         <div class="brand-sub" style="margin-bottom:20px;">${periodoLabel(periodo)}${inicio || fim ? ` · Turno: ${inicio || '00:00'} às ${fim || '23:59'}` : ''}</div>
 
         <div class="section-title">Entregas</div>
-        <table class="report-table">
+        <div class="table-scroll"><table class="report-table">
           <thead><tr><th>Data/hora</th><th>Cliente</th><th>Tipo</th><th>Valor</th></tr></thead>
           <tbody>${linhasEntregas}</tbody>
-        </table>
+        </table></div>
 
         <div class="section-title">Descontos</div>
-        <table class="report-table">
+        <div class="table-scroll"><table class="report-table">
           <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead>
           <tbody>${linhasDescontos}</tbody>
-        </table>
+        </table></div>
 
         <div class="report-total-row"><span>Total bruto</span><span>${formatMoney(totalBruto)}</span></div>
         <div class="report-total-row"><span>Total de descontos</span><span>- ${formatMoney(totalDesc)}</span></div>
