@@ -52,12 +52,6 @@
     line-height: 1.6;
     margin-bottom: 26px;
   }
-  .phone-hint{
-    color: var(--ink-soft);
-    font-size: 12.5px;
-    line-height: 1.5;
-    margin: 0 0 12px;
-  }
   .tile{
     display:block;
     width:100%;
@@ -452,16 +446,6 @@ let state = {
   confirmDeleteDescontoId: null,
   confirmDeleteDriverName: null,
   relatorio: null,
-  phoneView: 'enviar',
-  smsEnviado: false,
-  smsError: '',
-  phoneEnviado: '',
-  phoneVerificado: null,
-  phoneNaoLigado: false,
-  phoneLinkError: '',
-  phoneNome: '',
-  phoneLinkNome: '',
-  phoneLinkSenha: '',
   loaded: false,
   dataReady: false
 };
@@ -534,36 +518,11 @@ function temSenhaAdmin() {
   return !!(state.adminSenhaHash || state.adminSenha);
 }
 
-// ---------- login por telefone ----------
-
-function normalizarTelefone(input){
-  let s = String(input || '').replace(/[^\d+]/g, '');
-  if(!s) return '';
-  s = s.replace(/^0+/, '');
-  if(!s.startsWith('+')){
-    s = '+' + (s.startsWith('55') ? s : '55' + s);
-  }
-  return s;
-}
-
-let confirmacaoSms = null;
-let recaptchaVerifier = null;
-
+// Limpa sessões autenticadas no Firebase e restaura o acesso anónimo.
 async function resetearAuthFirebase(){
   if(firebase && firebase.auth){
     try{ await firebase.auth().signOut(); }catch(e){}
     try{ await firebase.auth().signInAnonymously(); }catch(e){ console.error('Falha ao reautenticar anonimamente', e); }
-  }
-}
-
-function mensagemErroTelefone(code){
-  switch(code){
-    case 'auth/invalid-phone-number': return 'Número de telefone inválido.';
-    case 'auth/too-many-requests': return 'Muitas tentativas. Aguarde um pouco e tente de novo.';
-    case 'auth/quota-exceeded': return 'Limite de SMS atingido por enquanto. Tente mais tarde.';
-    case 'auth/operation-not-allowed': return 'Autenticação por telefone não ativada no Firebase (ou SMS bloqueado para esta região).';
-    case 'auth/missing-app-credential': return 'Falha na verificação reCAPTCHA. Recarregue e tente de novo.';
-    default: return 'Não foi possível enviar o código. Tente de novo (F12 para ver o erro).';
   }
 }
 
@@ -887,13 +846,6 @@ function goLogin(){
   state.changeError = '';
   state.adminPasswordInput = '';
   state.adminError = '';
-  state.phoneView = 'enviar';
-  state.smsEnviado = false;
-  state.smsError = '';
-  state.phoneEnviado = '';
-  state.phoneVerificado = null;
-  state.phoneNaoLigado = false;
-  state.phoneLinkError = '';
   resetearAuthFirebase();
   render();
 }
@@ -901,18 +853,6 @@ function goLogin(){
 function goDriverName(){
   state.view = 'driverName';
   state.driverError = '';
-  render();
-}
-
-function goDriverPhone(){
-  state.view = 'driverPhone';
-  state.phoneView = 'enviar';
-  state.smsEnviado = false;
-  state.smsError = '';
-  state.phoneEnviado = '';
-  state.phoneVerificado = null;
-  state.phoneNaoLigado = false;
-  state.phoneLinkError = '';
   render();
 }
 
@@ -935,18 +875,6 @@ async function submitDriverName(nomeSelecionado = ''){
     return;
   }
 
-  if(existente && existente.telefone && !existente.senhaHash && !existente.senha){
-    state.view = 'driverPhone';
-    state.phoneView = 'enviar';
-    state.smsEnviado = false;
-    state.phoneEnviado = '';
-    state.smsError = 'Este perfil usa entrada por telefone. Digite o número, receba o SMS e confirme para entrar.';
-    state.phoneVerificado = null;
-    state.phoneNaoLigado = false;
-    render();
-    return;
-  }
-
   if(!existente || (!existente.senha && !existente.senhaHash)){
     state.view = 'driverSetPassword';
     state.driverError = '';
@@ -964,264 +892,6 @@ function selecionarMotorista(idx){
   if(!motorista) return;
   state.driverInput = motorista.nome;
   submitDriverName(motorista.nome);
-}
-
-// ---------- fluxo de telefone ----------
-
-function criarVerificador(){
-  if(recaptchaVerifier){ try{ recaptchaVerifier.clear(); }catch(e){} }
-  recaptchaVerifier = new firebase.auth.RecaptchaVerifier('phoneSendBtn', {
-    size: 'invisible',
-    callback: function(){}
-  });
-  return recaptchaVerifier;
-}
-
-async function enviarCodigoSms(){
-  const input = document.getElementById('phoneInput');
-  const telefone = normalizarTelefone(input ? input.value : '');
-  if(!telefone){
-    state.smsError = 'Digite um número de telefone válido (ex.: 11987654321).';
-    render();
-    return;
-  }
-  state.smsError = '';
-  state.smsEnviado = false;
-  render();
-  try{
-    await resetearAuthFirebase();
-    const appVerifier = criarVerificador();
-    const resultado = await firebase.auth().signInWithPhoneNumber(telefone, appVerifier);
-    confirmacaoSms = resultado;
-    state.phoneView = 'confirmar';
-    state.phoneEnviado = telefone;
-    state.smsError = '';
-    render();
-  }catch(e){
-    confirmacaoSms = null;
-    state.phoneView = 'enviar';
-    state.smsError = mensagemErroTelefone(e.code) + (e && e.message ? ' (' + e.message + ')' : '');
-    render();
-  }
-}
-
-async function confirmarCodigoSms(){
-  const input = document.getElementById('smsCodeInput');
-  const codigo = (input ? input.value : '').trim();
-  if(!codigo){
-    state.smsError = 'Digite o código recebido por SMS.';
-    render();
-    return;
-  }
-  if(!confirmacaoSms){
-    state.smsError = 'Envie um código antes de confirmar.';
-    render();
-    return;
-  }
-  try{
-    await confirmacaoSms.confirm(codigo);
-  }catch(e){
-    state.smsError = 'Código incorreto ou expirado. Solicite um novo código se precisar.';
-    render();
-    return;
-  }
-  const telefone = firebase.auth().currentUser ? firebase.auth().currentUser.phoneNumber : '';
-  await resetearAuthFirebase();
-  if(!telefone){
-    state.smsError = 'Não foi possível confirmar o telefone. Tente de novo.';
-    render();
-    return;
-  }
-  const m = state.data.motoboys.find(x => x.telefone === telefone);
-  if(m){
-    salvarPerfilConhecido(m.nome);
-    entrarNoPerfil(m.nome);
-    return;
-  }
-  state.phoneVerificado = telefone;
-  state.phoneNaoLigado = true;
-  state.view = 'driverPhoneLink';
-  state.phoneLinkError = '';
-  render();
-}
-
-function voltarTelaSms(){
-  confirmacaoSms = null;
-  if(recaptchaVerifier){ try{ recaptchaVerifier.clear(); }catch(e){} }
-  state.phoneView = 'enviar';
-  state.smsEnviado = false;
-  state.smsError = '';
-  state.phoneEnviado = '';
-  state.phoneVerificado = null;
-  state.phoneNaoLigado = false;
-  state.phoneLinkError = '';
-  state.view = 'driverPhone';
-  render();
-}
-
-function renderDriverPhone(app){
-  app.innerHTML = `
-    <div>
-      <button class="back-btn" onclick="goLogin()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
-      <div class="brand" style="font-size:22px; margin-top:10px;">Entrar com telefone</div>
-      <div class="brand-sub">Você recebe um código por SMS para entrar no seu perfil.</div>
-      <div class="card">
-      ${state.phoneView === 'enviar' ? `
-        <label for="phoneInput">Número de telefone</label>
-        <input type="tel" id="phoneInput" placeholder="11987654321" inputmode="tel" onkeydown="if(event.key==='Enter') enviarCodigoSms()">
-        <button class="btn btn-primary" id="phoneSendBtn" onclick="enviarCodigoSms()">Enviar código</button>
-        <div class="phone-hint">Digite sem espaços nem traços, com DDD. Um código será enviado por SMS.</div>
-      ` : `
-        <div class="phone-hint">Código enviado para <strong>${escapeHtml(state.phoneEnviado || '')}</strong>. Digite ele abaixo:</div>
-        <label for="smsCodeInput">Código do SMS</label>
-        <input type="text" id="smsCodeInput" placeholder="000000" inputmode="numeric" onkeydown="if(event.key==='Enter') confirmarCodigoSms()">
-        <button class="btn btn-primary" onclick="confirmarCodigoSms()">Confirmar e entrar</button>
-        <button class="btn" onclick="voltarTelaSms()" style="margin-top:6px;">Enviar para outro número</button>
-      `}
-      ${state.smsError ? `<div class="error-msg">${escapeHtml(state.smsError)}</div>` : ''}
-      <button class="btn" onclick="goDriverName()" style="margin-top:10px;">Preferes entrar com nome e senha</button>
-      </div>
-    </div>
-  `;
-  if(state.phoneView === 'enviar'){
-    const el = document.getElementById('phoneInput');
-    if(el) el.focus();
-  }else{
-    const el = document.getElementById('smsCodeInput');
-    if(el) el.focus();
-  }
-}
-
-function renderDriverPhoneLink(app){
-  app.innerHTML = `
-    <div>
-      <button class="back-btn" onclick="goLogin()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
-      <div class="brand" style="font-size:22px; margin-top:10px;">Perfil confirmado</div>
-      <div class="brand-sub">O número <strong>${escapeHtml(state.phoneVerificado || '')}</strong> não está ligado a nenhum perfil. Ligue-o ao seu perfil:</div>
-      <div class="card">
-        <div class="phone-hint" style="margin-top:0;">Sou um entregador novo — crio o meu perfil:</div>
-        <label for="phoneNome">Seu nome</label>
-        <input type="text" id="phoneNome" placeholder="Nome" onkeydown="if(event.key==='Enter') submitPhoneLinkNew()">
-        <button class="btn btn-primary" onclick="submitPhoneLinkNew()">Criar perfil com este telefone</button>
-      </div>
-      <div class="card">
-        <div class="phone-hint" style="margin-top:0;">Já sou entregador — ligo este telefone ao meu perfil (preciso da senha):</div>
-        <label for="phoneLinkNome">Nome do perfil</label>
-        <input type="text" id="phoneLinkNome" placeholder="Nome" onkeydown="if(event.key==='Enter') document.getElementById('phoneLinkSenha').focus()">
-        <label for="phoneLinkSenha">Senha</label>
-        <input type="password" id="phoneLinkSenha" placeholder="••••" onkeydown="if(event.key==='Enter') submitPhoneLinkExisting()">
-        <button class="btn btn-primary" onclick="submitPhoneLinkExisting()">Vincular e entrar</button>
-      </div>
-      ${state.phoneLinkError ? `<div class="error-msg">${escapeHtml(state.phoneLinkError)}</div>` : ''}
-    </div>
-  `;
-  const el = document.getElementById('phoneNome');
-  if(el) el.focus();
-}
-
-async function submitPhoneLinkNew(){
-  const input = document.getElementById('phoneNome');
-  const nome = (input ? input.value : '').trim();
-  state.phoneLinkError = '';
-  if(!nome){
-    state.phoneLinkError = 'Digite seu nome.';
-    render();
-    return;
-  }
-  if(state.data.motoboys.some(x => x.nome.toLowerCase() === nome.toLowerCase())){
-    state.phoneLinkError = 'Este nome já existe. Use a opção "Já sou entregador" para vincular com a senha.';
-    render();
-    return;
-  }
-  const novo = { nome, telefone: state.phoneVerificado };
-  state.data.motoboys.push(novo);
-  state.driverPendingName = nome;
-  state.driverError = '';
-  try{
-    await saveData();
-    salvarPerfilConhecido(nome);
-    entrarNoPerfil(nome);
-  }catch(e){
-    state.data.motoboys.pop();
-    state.phoneLinkError = 'Não foi possível salvar. Tente de novo.';
-    render();
-  }
-}
-
-async function submitPhoneLinkExisting(){
-  const nomeInput = document.getElementById('phoneLinkNome');
-  const senhaInput = document.getElementById('phoneLinkSenha');
-  const nome = (nomeInput ? nomeInput.value : '').trim();
-  const senha = (senhaInput ? senhaInput.value : '') || '';
-  state.phoneLinkError = '';
-  if(!nome || !senha){
-    state.phoneLinkError = 'Preencha o nome e a senha.';
-    render();
-    return;
-  }
-  const m = state.data.motoboys.find(x => x.nome.toLowerCase() === nome.toLowerCase());
-  if(!m || !senhaValida(m, senha)){
-    state.phoneLinkError = 'Nome ou senha incorretos.';
-    render();
-    return;
-  }
-  if(m.telefone && m.telefone !== state.phoneVerificado){
-    state.phoneLinkError = 'Este perfil já está ligado a outro telefone. Peça ao administrador para alterar.';
-    render();
-    return;
-  }
-  m.telefone = state.phoneVerificado;
-  try{
-    await saveData();
-    salvarPerfilConhecido(m.nome);
-    entrarNoPerfil(m.nome);
-  }catch(e){
-    state.phoneLinkError = 'Não foi possível salvar. Tente de novo.';
-    render();
-  }
-}
-
-async function ligarTelefoneDriver(idx){
-  const m = state.data.motoboys[idx];
-  const input = document.getElementById('telDriver_' + idx);
-  const telefone = normalizarTelefone(input ? input.value : '');
-  if(!m || !telefone){
-    state.adminError = 'Digite o número de telefone do entregador.';
-    render();
-    return;
-  }
-  const duplicado = state.data.motoboys.some((x, i) => i !== idx && x.telefone === telefone);
-  if(duplicado){
-    state.adminError = 'Este número já está ligado a outro perfil.';
-    render();
-    return;
-  }
-  if(m.telefone && m.telefone !== telefone){
-    state.adminError = `O perfil já tem o telefone ${m.telefone}. Remova-o antes de ligar outro.`;
-    render();
-    return;
-  }
-  m.telefone = telefone;
-  state.adminError = '';
-  try{
-    await saveData();
-  }catch(e){
-    state.adminError = 'Não foi possível salvar. Tente de novo.';
-  }
-  render();
-}
-
-async function removerTelefoneDriver(idx){
-  const m = state.data.motoboys[idx];
-  if(!m || !m.telefone) return;
-  delete m.telefone;
-  state.adminError = '';
-  try{
-    await saveData();
-  }catch(e){
-    state.adminError = 'Não foi possível salvar. Tente de novo.';
-  }
-  render();
 }
 
 function salvarPreferenciaAlertas(ativa){
@@ -1797,8 +1467,6 @@ function render(){
   else if(state.view === 'driverName') renderDriverName(app);
   else if(state.view === 'driverSetPassword') renderDriverSetPassword(app);
   else if(state.view === 'driverLoginPassword') renderDriverLoginPassword(app);
-  else if(state.view === 'driverPhone') renderDriverPhone(app);
-  else if(state.view === 'driverPhoneLink') renderDriverPhoneLink(app);
   else if(state.view === 'driverChangePassword') renderDriverChangePassword(app);
   else if(state.view === 'driverDashboard') renderDriverDashboard(app);
   else if(state.view === 'adminLogin') renderAdminLogin(app);
@@ -1835,10 +1503,6 @@ function renderLogin(app){
       <button class="tile tile-driver" onclick="goDriverName()">
         Sou entregador
         <small>Entrar com nome + senha</small>
-      </button>
-      <button class="tile tile-driver" style="background:#e8f7cf;" onclick="goDriverPhone()">
-        Entrar com meu telefone
-        <small>Recebo um código por SMS e entro</small>
       </button>
       <button class="tile tile-admin" onclick="goAdminLogin()">
         Sou administrador
@@ -2255,13 +1919,6 @@ function renderAdminDashboard(app){
             </div>
             <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirRelatorio(${idx})">Gerar relatório</button>
 
-            <div class="section-title">Telefone do entregador${m.telefone ? ` · <span style="font-weight:700; color:var(--lettuce);">${escapeHtml(m.telefone)}</span>` : ''}</div>
-            <div class="period-row" style="gap:8px;">
-              <input type="tel" id="telDriver_${idx}" placeholder="11987654321" inputmode="tel" style="flex:1;">
-              <button class="btn btn-secondary" onclick="ligarTelefoneDriver(${idx})">Ligar telefone</button>
-              ${m.telefone ? `<button class="btn btn-secondary" style="margin:0; background:#fff5f3; border-color:#facfc8; color:var(--tomato);" onclick="removerTelefoneDriver(${idx})">Remover</button>` : ''}
-            </div>
-            <div style="font-size:12px; color:var(--ink-soft); margin-bottom:16px;">Com um número ligado, o entregador pode entrar com código SMS. Cada número é usado por apenas um perfil.</div>
             ${state.confirmDeleteDriverName === nome ? `
               <div class="card" style="background:#fff5f3; border-color:#facfc8; padding:14px;">
                 <div style="font-size:13px; font-weight:700; margin-bottom:4px;">Apagar perfil ${escapeHtml(nome)}?</div>
