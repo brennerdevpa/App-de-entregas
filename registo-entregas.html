@@ -1,0 +1,1733 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Registo de Entregas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg: #f4f7f5;
+    --surface: #ffffff;
+    --ink: #15201c;
+    --ink-soft: #71807a;
+    --mustard: #b8f35a;
+    --mustard-dark: #8fc734;
+    --tomato: #e65545;
+    --lettuce: #16866c;
+    --line: #e3e9e5;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    background: radial-gradient(circle at 90% -10%, #dff8c6 0, transparent 28rem), var(--bg);
+    color: var(--ink);
+    font-family: 'Manrope', sans-serif;
+    min-height: 100vh;
+  }
+  #app{
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 28px 20px 60px;
+    display: flex;
+    flex-direction: column;
+  }
+  .brand{
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -1.4px;
+    margin: 8px 0 5px;
+  }
+  .brand-sub{
+    color: var(--ink-soft);
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 26px;
+  }
+  .tile{
+    display:block;
+    width:100%;
+    text-align:left;
+    border:none;
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 18px;
+    cursor: pointer;
+    margin-bottom: 14px;
+    box-shadow: 0 10px 22px rgba(21,32,28,.08);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .tile:hover{ transform: translateY(-2px); box-shadow: 0 14px 28px rgba(21,32,28,.14); }
+  .tile:active{ transform: scale(.98); }
+  .tile-driver{ background: var(--mustard); color: var(--ink); }
+  .tile-admin{ background: linear-gradient(135deg, #17241f, #2a3b34); color: #fff; }
+  .tile small{
+    display:block;
+    font-weight: 500;
+    font-size: 13px;
+    margin-top: 4px;
+    opacity: .8;
+  }
+  .card{
+    background: var(--surface);
+    border: 1px solid rgba(227,233,229,.9);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 24px rgba(21,32,28,.05);
+  }
+  label{
+    display:block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  input[type=text], input[type=password], input[type=time]{
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: #fbfcfb;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+  input:focus{ outline: 3px solid rgba(143,199,52,.2); border-color: var(--mustard-dark); }
+  .btn{
+    display:inline-block;
+    border:none;
+    border-radius: 12px;
+    padding: 13px 18px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 15px;
+    cursor:pointer;
+    width: 100%;
+  }
+  .btn-primary{ background: var(--ink); color: #fff; box-shadow: 0 8px 16px rgba(21,32,28,.16); }
+  .btn-primary:hover{ background:#26372f; }
+  .btn-secondary{ background: transparent; color: var(--ink-soft); border: 1.5px solid var(--line); margin-top:8px; }
+  .btn-ghost{ background: transparent; color: var(--ink-soft); padding: 6px 0; width: auto; font-size: 13px; font-weight: 700; }
+  .back-btn{
+    width:40px;
+    height:40px;
+    display:grid;
+    place-items:center;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:50%;
+    background:rgba(255,255,255,.82);
+    color:var(--ink);
+    box-shadow:0 4px 12px rgba(21,32,28,.06);
+    transition:transform .18s ease, background .18s ease, box-shadow .18s ease;
+  }
+  .back-btn:hover{ background:var(--mustard); box-shadow:0 7px 15px rgba(21,32,28,.12); transform:translateX(-2px); }
+  .back-btn svg{ width:19px; height:19px; }
+  .header-actions{ display:flex; gap:8px; align-items:center; }
+  .header-action{
+    width:38px;
+    height:38px;
+    display:grid;
+    place-items:center;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:rgba(255,255,255,.82);
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition:transform .18s ease, color .18s ease, border-color .18s ease, background .18s ease;
+  }
+  .header-action:hover{ transform:translateY(-2px); color:var(--ink); border-color:#cbd7d0; background:#fff; }
+  .header-action.exit:hover{ color:var(--tomato); border-color:#facfc8; background:#fff5f3; }
+  .header-action svg{ width:18px; height:18px; }
+  .type-row{ display:flex; gap: 10px; margin-bottom: 18px; }
+  .type-btn{
+    flex:1;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    padding: 14px 8px;
+    text-align:center;
+    cursor:pointer;
+    font-weight: 700;
+  }
+  .type-btn.active-cidade{ background: var(--lettuce); border-color: var(--lettuce); color:#fff; box-shadow: 0 6px 12px rgba(22,134,108,.18); }
+  .type-btn.active-estrada{ background: var(--tomato); border-color: var(--tomato); color:#fff; box-shadow: 0 6px 12px rgba(230,85,69,.18); }
+  .type-btn span{ display:block; font-size:12px; font-weight:500; margin-top:2px; }
+  .topbar{
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+  .topbar h1{
+    font-size: 20px;
+    font-weight:800;
+    letter-spacing:-.7px;
+    margin:0;
+  }
+  .stat-row{ display:flex; gap:10px; margin-bottom: 18px; }
+  .stat{
+    flex:1;
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px;
+    text-align:center;
+  }
+  .stat b{ display:block; font-size: 20px; font-weight:800; letter-spacing:-.7px; }
+  .stat span{ font-size: 11px; color: var(--ink-soft); font-weight:600; }
+  .entrega-item{
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .entrega-top{ display:flex; justify-content: space-between; align-items:flex-start; gap:8px; }
+  .entrega-cliente{ font-weight:700; font-size:15px; }
+  .entrega-meta{ font-size:12.5px; color: var(--ink-soft); margin-top:2px; }
+  .badge{
+    font-size: 11px;
+    font-weight:700;
+    padding: 4px 9px;
+    border-radius: 20px;
+    color:#fff;
+    white-space:nowrap;
+  }
+  .badge-cidade{ background: var(--lettuce); }
+  .badge-estrada{ background: var(--tomato); }
+  .entrega-valor{ font-family:'DM Mono', monospace; font-weight:500; font-size:15px; margin-top:10px; }
+  .entrega-actions{ display:flex; gap:8px; margin-top:10px; }
+  .mini-btn{
+    flex:1;
+    border:none;
+    border-radius: 8px;
+    padding: 9px 6px;
+    font-size: 13px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .mini-edit{ background: #e8f7cf; color: #355e12; }
+  .mini-del{ background: #fff0ed; color: var(--tomato); }
+  .mini-confirm{ background: var(--tomato); color:#fff; }
+  .empty{
+    text-align:center;
+    color: var(--ink-soft);
+    font-size: 14px;
+    padding: 30px 10px;
+  }
+  .driver-section{ margin-bottom: 20px; }
+  .driver-header{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #17241f, #2a3b34);
+    color: #fff;
+    border-radius: 14px 14px 0 0;
+    cursor:pointer;
+  }
+  .driver-header b{ font-size: 15px; }
+  .driver-header .amount{ font-family:'DM Mono', monospace; font-size: 14px; }
+  .driver-body{
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    padding: 12px;
+  }
+  .error-msg{
+    background: #fff0ed;
+    color: var(--tomato);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .loading{ text-align:center; padding: 60px 10px; color: var(--ink-soft); }
+  .footer-note{ text-align:center; font-size:11.5px; color: var(--ink-soft); margin-top: 24px; }
+  .badge-desconto{ background: var(--ink); }
+  .period-row{ display:flex; gap:8px; margin-bottom: 16px; }
+  .period-btn{
+    flex:1;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    padding: 10px 4px;
+    text-align:center;
+    cursor:pointer;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .period-btn.active{ background: var(--ink); border-color: var(--ink); color: #fff; }
+  .time-filter{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:8px 0 14px; }
+  .time-filter label{ margin:0; }
+  .time-filter input{ margin:5px 0 0; padding:10px 11px; font-size:14px; }
+  .time-filter-actions{ display:flex; gap:8px; margin-bottom:16px; }
+  .time-filter-actions .btn{ width:auto; padding:10px 13px; font-size:13px; margin:0; }
+  .alert-control{ display:flex; align-items:center; gap:12px; padding:14px 16px; margin-bottom:18px; }
+  .alert-control-icon{ width:38px; height:38px; display:grid; place-items:center; flex:none; border-radius:12px; background:#e8f7cf; color:#4d7f16; }
+  .alert-control-icon svg{ width:19px; height:19px; }
+  .alert-control-copy{ flex:1; font-size:12px; line-height:1.45; color:var(--ink-soft); }
+  .alert-control-copy b{ display:block; color:var(--ink); font-size:13px; }
+  .alert-control .btn{ width:auto; padding:9px 12px; font-size:12px; }
+  .live-alert{ position:fixed; z-index:1000; right:18px; bottom:18px; max-width:330px; padding:15px 18px; border-radius:15px; background:var(--ink); color:#fff; box-shadow:0 18px 42px rgba(21,32,28,.25); font-size:13px; line-height:1.5; animation:alert-in .25s ease-out; }
+  .live-alert b{ display:block; margin-bottom:2px; }
+  @keyframes alert-in{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:translateY(0); } }
+  .section-title{ font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 18px 0 8px; text-transform: none; }
+  .report-table{ width:100%; border-collapse: collapse; margin-bottom: 10px; }
+  .report-table th, .report-table td{
+    text-align:left;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .report-table th{ color: var(--ink-soft); font-weight:600; }
+  .report-total-row{ display:flex; justify-content: space-between; padding: 10px 6px; font-weight:700; }
+  .report-total-row.net{ font-weight:800; font-size: 17px; border-top: 2px solid var(--ink); margin-top: 6px; }
+  @media (min-width: 720px){
+    #app{ max-width: 780px; padding-top:48px; }
+    .stat-row{ gap:14px; }
+    .card{ padding:24px; }
+  }
+  @media print{
+    body *{ visibility: hidden; }
+    .print-area, .print-area *{ visibility: visible; }
+    .print-area{ position: absolute; left:0; top:0; width:100%; padding: 0 10px; }
+    .no-print{ display:none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Carregando...</div></div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDKdV4laGoPMGz2hz-rUd77OIp4BsiX0s0",
+  authDomain: "appmotoboys.firebaseapp.com",
+  projectId: "appmotoboys",
+  storageBucket: "appmotoboys.firebasestorage.app",
+  messagingSenderId: "138452699945",
+  appId: "1:138452699945:web:09e5b28d1d405cb599c538"
+};
+
+let db, auth, DOC_REF, unsub = null;
+let firebaseOk = false;
+try{
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  auth = firebase.auth();
+  DOC_REF = db.collection('app').doc('estado');
+  firebaseOk = true;
+}catch(e){
+  console.error('Erro ao inicializar Firebase', e);
+}
+
+const VALORES = { cidade: 3, estrada: 6 };
+
+let state = {
+  view: 'login',
+  driverInput: '',
+  driverPendingName: '',
+  currentDriver: null,
+  driverPeriodo: 'semana',
+  data: { motoboys: [], entregas: [], descontos: [] },
+  novoCliente: '',
+  novoTipo: 'cidade',
+  editingId: null,
+  editCliente: '',
+  editTipo: 'cidade',
+  confirmDeleteId: null,
+  adminPasswordInput: '',
+  adminError: '',
+  adminSenha: '1234',
+  adminChangeError: '',
+  adminAlerts: (() => { try{ return localStorage.getItem('appmotoboys_alertas_admin') === '1'; }catch(e){ return false; } })(),
+  adminAlertError: '',
+  liveAlert: null,
+  driverError: '',
+  changeError: '',
+  openDriverSection: null,
+  periodos: {},
+  horarios: {},
+  descontoErro: '',
+  saveError: '',
+  descInputs: {},
+  confirmDeleteDescontoId: null,
+  confirmDeleteMotoboyNome: null,
+  relatorio: null,
+  loaded: false,
+  dataReady: false
+};
+
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function formatMoney(v){
+  const valor = Number(v);
+  return 'R$ ' + (Number.isFinite(valor) ? valor : 0).toFixed(2).replace('.', ',');
+}
+
+function formatHorario(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+// ---------- períodos (diário / semanal / mensal) ----------
+
+function isSameDay(d, ref){
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate();
+}
+
+function startOfWeek(ref){
+  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const dia = d.getDay();
+  const diff = (dia === 0 ? -6 : 1) - dia;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function startOfMonth(ref){
+  return new Date(ref.getFullYear(), ref.getMonth(), 1);
+}
+
+function filterByPeriod(items, periodo, campoData){
+  if(periodo === 'tudo') return items;
+  const agora = new Date();
+  return items.filter(item => {
+    const d = new Date(item[campoData]);
+    if(periodo === 'dia') return isSameDay(d, agora);
+    if(periodo === 'semana'){
+      const inicio = startOfWeek(agora);
+      const fim = new Date(inicio); fim.setDate(inicio.getDate() + 7);
+      return d >= inicio && d < fim;
+    }
+    if(periodo === 'mes'){
+      const inicio = startOfMonth(agora);
+      const fim = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 1);
+      return d >= inicio && d < fim;
+    }
+    return true;
+  });
+}
+
+function periodoLabel(periodo){
+  const agora = new Date();
+  if(periodo === 'dia') return agora.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+  if(periodo === 'semana'){
+    const inicio = startOfWeek(agora);
+    const fim = new Date(inicio); fim.setDate(inicio.getDate() + 6);
+    return 'Semana de ' + inicio.toLocaleDateString('pt-BR') + ' a ' + fim.toLocaleDateString('pt-BR');
+  }
+  if(periodo === 'mes') return agora.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  return 'Todo o período';
+}
+
+function getPeriodo(idx){
+  return (state.periodos && state.periodos[idx]) || 'semana';
+}
+
+function getHorarioFiltro(idx){
+  return (state.horarios && state.horarios[idx]) || { inicio: '', fim: '' };
+}
+
+function filterByHour(items, inicio, fim, campoData){
+  if(!inicio && !fim) return items;
+  const paraMinutos = valor => {
+    const [hora, minuto] = valor.split(':').map(Number);
+    return hora * 60 + minuto;
+  };
+  const inicioMin = inicio ? paraMinutos(inicio) : null;
+  const fimMin = fim ? paraMinutos(fim) : null;
+  return items.filter(item => {
+    const data = new Date(item[campoData]);
+    const minutos = data.getHours() * 60 + data.getMinutes();
+    if(inicioMin !== null && fimMin !== null){
+      return inicioMin <= fimMin
+        ? minutos >= inicioMin && minutos <= fimMin
+        : minutos >= inicioMin || minutos <= fimMin;
+    }
+    return inicioMin !== null ? minutos >= inicioMin : minutos <= fimMin;
+  });
+}
+
+function normalizarDados(){
+  if(!state.data.motoboys) state.data.motoboys = [];
+  if(!state.data.entregas) state.data.entregas = [];
+  if(!state.data.descontos) state.data.descontos = [];
+  state.data.motoboys = state.data.motoboys.map(m => typeof m === 'string' ? { nome: m, senha: null } : m);
+  state.data.entregas = state.data.entregas
+    .filter(e => e && e.id && e.motoboy && e.cliente)
+    .map(e => ({ ...e, valor: Number(e.valor) || VALORES[e.tipo] || 0 }));
+  state.data.descontos = state.data.descontos
+    .filter(d => d && d.id && d.motoboy)
+    .map(d => ({ ...d, valor: Number(d.valor) || 0 }));
+  state.adminSenha = state.data.adminSenha || '1234';
+}
+
+let inicializacaoConcluida = false;
+let entregasObservadas = null;
+let miniTela = null;
+
+async function inicializarFirebase(){
+  state.loaded = true;
+  render();
+
+  if(!firebaseOk){
+    document.getElementById('app').innerHTML = '<div class="error-msg" style="margin:40px auto; max-width:400px;">Falha ao ligar ao Firebase. Verifique a consola (F12) e a sua ligação à internet.</div>';
+    return;
+  }
+
+  try{
+    await auth.signInAnonymously();
+  }catch(e){
+    console.error('Erro ao autenticar anonimamente', e);
+  }
+
+  iniciarListener();
+  const options = { source: 'cache' };
+  let snap = null;
+  try{
+    snap = await DOC_REF.get(options);
+  }catch(e){
+    console.error('Erro no cache do Firestore', e);
+  }
+  if(!snap || !snap.exists){
+    try{
+      snap = await DOC_REF.get();
+    }catch(e){
+      console.error('Erro ao ler dados do Firestore', e);
+    }
+  }
+  if(snap && snap.exists){
+    state.data = snap.data();
+    normalizarDados();
+    state.dataReady = true;
+    render();
+  }else{
+    try{
+      await DOC_REF.set(state.data);
+      state.dataReady = true;
+    }catch(e){
+      console.error('Erro ao criar documento no Firestore', e);
+      state.saveError = 'Não foi possível iniciar os dados no Firebase. Verifique a ligação e as permissões do Firestore.';
+      render();
+    }
+  }
+  inicializacaoConcluida = true;
+  restauraSessaoMotorista();
+  restauraSessaoAdmin();
+}
+
+function iniciarListener(){
+  if(unsub) unsub();
+  // No SDK "compat", o listener pertence à referência do documento.
+  unsub = DOC_REF.onSnapshot(snap => {
+    if(snap.exists){
+      const novos = snap.data();
+      const entregasNovas = novos.entregas || [];
+      if(entregasObservadas === null){
+        entregasObservadas = new Set(entregasNovas.map(e => e.id));
+      }else{
+        const adicionadas = entregasNovas.filter(e => e && e.id && !entregasObservadas.has(e.id));
+        entregasObservadas = new Set(entregasNovas.map(e => e.id));
+        if(adicionadas.length) avisarNovasEntregas(adicionadas);
+      }
+      const atual = JSON.stringify(state.data);
+      if(JSON.stringify(novos) !== atual){
+        state.data = novos;
+        normalizarDados();
+        state.dataReady = true;
+        render();
+      }
+    }
+  }, err => {
+    console.error('Erro no listener Firestore', err);
+    state.saveError = 'A sincronização com o Firebase falhou. Verifique a ligação e tente recarregar a página.';
+    render();
+  });
+}
+
+function withTimeout(promise, ms){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo esgotado ao contactar o Firebase')), ms))
+  ]);
+}
+
+// Nunca deve ser "esperado" (await) antes de trocar de ecrã: a gravação
+// acontece em segundo plano para a navegação nunca ficar bloqueada à espera
+// da rede (o que antes fazia a aplicação parecer "congelada").
+async function saveData(){
+  try{
+    await withTimeout(DOC_REF.set(state.data), 15000);
+    state.saveError = '';
+  }catch(e){
+    console.error('Erro ao salvar no Firestore', e);
+    state.saveError = 'Não foi possível guardar a alteração. Verifique a ligação e tente novamente.';
+    render();
+  }
+}
+
+// ---------- ações ----------
+
+function salvarSessaoMotorista(nome){
+  try{
+    localStorage.setItem('appmotoboys_motorista', JSON.stringify({ nome, data: todayStr() }));
+  }catch(e){}
+}
+
+function limparSessaoMotorista(){
+  try{ localStorage.removeItem('appmotoboys_motorista'); }catch(e){}
+}
+
+// Guarda apenas qual perfil já foi confirmado neste aparelho. A sessão diária
+// continua separada e é removida ao sair ou ao mudar de dia.
+function salvarPerfilConhecido(nome){
+  try{ localStorage.setItem('appmotoboys_perfil_conhecido', nome); }catch(e){}
+}
+
+function perfilConhecido(){
+  try{ return localStorage.getItem('appmotoboys_perfil_conhecido'); }catch(e){ return null; }
+}
+
+function sessaoMotoristaSalva(){
+  try{ return localStorage.getItem('appmotoboys_motorista'); }catch(e){ return null; }
+}
+
+function salvarSessaoAdmin(){
+  try{ localStorage.setItem('appmotoboys_admin', JSON.stringify({ data: todayStr() })); }catch(e){}
+}
+
+function limparSessaoAdmin(){
+  try{ localStorage.removeItem('appmotoboys_admin'); }catch(e){}
+}
+
+function restauraSessaoAdmin(){
+  // Se houver uma sessão válida de entregador, ela tem prioridade nesta aba.
+  if(state.view === 'driverDashboard') return;
+  let sessao;
+  try{ sessao = JSON.parse(localStorage.getItem('appmotoboys_admin')); }catch(e){ limparSessaoAdmin(); return; }
+  if(!sessao) return;
+  if(sessao.data !== todayStr()){
+    limparSessaoAdmin();
+    return;
+  }
+  state.view = 'adminDashboard';
+  state.adminError = '';
+  render();
+}
+
+function restauraSessaoMotorista(){
+  const sessao = sessaoMotoristaSalva();
+  if(!sessao) return;
+  let dados;
+  try{ dados = JSON.parse(sessao); }catch(e){ limparSessaoMotorista(); return; }
+  if(!dados.nome || dados.data !== todayStr()){
+    limparSessaoMotorista();
+    return;
+  }
+  const nome = dados.nome;
+  const m = state.data.motoboys.find(x => x.nome.toLowerCase() === nome.toLowerCase());
+  if(m){
+    state.currentDriver = m.nome;
+    state.view = 'driverDashboard';
+    state.driverError = '';
+    render();
+  }else{
+    limparSessaoMotorista();
+  }
+}
+
+function goLogin(){
+  limparSessaoMotorista();
+  limparSessaoAdmin();
+  state.view = 'login';
+  state.driverInput = '';
+  state.driverPendingName = '';
+  state.currentDriver = null;
+  state.driverError = '';
+  state.changeError = '';
+  state.adminPasswordInput = '';
+  state.adminError = '';
+  render();
+}
+
+function goDriverName(){
+  state.view = 'driverName';
+  state.driverError = '';
+  render();
+}
+
+async function submitDriverName(nomeSelecionado = ''){
+  const nomeInput = document.getElementById('driverNameInput');
+  // Ao tocar num perfil da lista, use o nome recebido diretamente. O campo de
+  // texto ainda contém o valor anterior naquele exato momento do clique.
+  const nome = (nomeSelecionado || (nomeInput ? nomeInput.value : state.driverInput)).trim();
+  if(!nome){
+    state.driverError = 'Digite seu nome para continuar.';
+    render();
+    return;
+  }
+  const existente = state.data.motoboys.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+  state.driverPendingName = existente ? existente.nome : nome;
+
+  // Um perfil já autenticado neste aparelho pode voltar a entrar sem senha.
+  if(existente && perfilConhecido() && existente.nome.toLowerCase() === perfilConhecido().toLowerCase()){
+    entrarNoPerfil(existente.nome);
+    return;
+  }
+
+  if(!existente || !existente.senha){
+    state.view = 'driverSetPassword';
+    state.driverError = '';
+    render();
+    return;
+  }
+
+  state.view = 'driverLoginPassword';
+  state.driverError = '';
+  render();
+}
+
+function selecionarMotorista(idx){
+  const motorista = state.data.motoboys[idx];
+  if(!motorista) return;
+  state.driverInput = motorista.nome;
+  submitDriverName(motorista.nome);
+}
+
+function salvarPreferenciaAlertas(ativa){
+  try{ localStorage.setItem('appmotoboys_alertas_admin', ativa ? '1' : '0'); }catch(e){}
+}
+
+function ativarAlertasAdmin(){
+  state.adminAlertError = '';
+  if(!('Notification' in window)){
+    state.adminAlertError = 'Este navegador não oferece notificações.';
+    render();
+    return;
+  }
+  Notification.requestPermission().then(permissao => {
+    if(permissao === 'granted'){
+      state.adminAlerts = true;
+      salvarPreferenciaAlertas(true);
+    }else{
+      state.adminAlerts = false;
+      state.adminAlertError = 'Permissão de notificações não concedida.';
+    }
+    render();
+  });
+}
+
+function desativarAlertasAdmin(){
+  state.adminAlerts = false;
+  state.adminAlertError = '';
+  salvarPreferenciaAlertas(false);
+  render();
+}
+
+function avisarNovasEntregas(entregas){
+  if(!state.adminAlerts || !['adminDashboard', 'adminReport'].includes(state.view)) return;
+  const ultima = entregas[entregas.length - 1];
+  const quantidade = entregas.length;
+  const mensagem = quantidade === 1
+    ? `${ultima.motoboy} registrou uma entrega para ${ultima.cliente}.`
+    : `${quantidade} novas entregas foram registradas.`;
+  state.liveAlert = { mensagem };
+  if('Notification' in window && Notification.permission === 'granted'){
+    new Notification('Nova entrega', { body: mensagem, tag: 'appmotoboys-nova-entrega' });
+  }
+  render();
+  setTimeout(() => {
+    if(state.liveAlert && state.liveAlert.mensagem === mensagem){
+      state.liveAlert = null;
+      render();
+    }
+  }, 6500);
+}
+
+async function abrirMiniTela(){
+  if(!window.documentPictureInPicture){
+    state.adminAlertError = 'A mini tela sempre no topo funciona no Chrome ou Edge atualizados.';
+    render();
+    return;
+  }
+  try{
+    miniTela = await window.documentPictureInPicture.requestWindow({ width: 360, height: 420, preferInitialWindowPlacement: true });
+    miniTela.document.title = 'Registo de Entregas';
+    miniTela.addEventListener('pagehide', () => { miniTela = null; render(); });
+    atualizarMiniTela();
+    render();
+  }catch(e){
+    console.error('Não foi possível abrir a mini tela', e);
+    state.adminAlertError = 'Não foi possível abrir a mini tela. Tente novamente.';
+    render();
+  }
+}
+
+function atualizarMiniTela(){
+  if(!miniTela || miniTela.closed) return;
+  const entregas = [...state.data.entregas].sort((a,b) => new Date(b.horario) - new Date(a.horario));
+  const recentes = entregas.slice(0, 4);
+  const itens = recentes.length
+    ? recentes.map(e => `<div class="item"><b>${escapeHtml(e.motoboy)}</b><span>${escapeHtml(e.cliente)} · ${formatMoney(e.valor)}</span><small>${formatHorario(e.horario)}</small></div>`).join('')
+    : '<p class="empty">Aguardando entregas…</p>';
+  miniTela.document.body.innerHTML = `
+    <style>
+      *{box-sizing:border-box} body{margin:0;padding:18px;background:#f4f7f5;color:#15201c;font-family:Arial,sans-serif}
+      header{display:flex;justify-content:space-between;align-items:start;margin-bottom:16px} h1{font-size:17px;margin:0 0 4px;letter-spacing:-.4px} p{margin:0;color:#71807a;font-size:12px}
+      .count{padding:7px 10px;border-radius:10px;background:#b8f35a;font-size:12px;font-weight:700}.item{background:#fff;border:1px solid #e3e9e5;border-radius:12px;padding:11px;margin-bottom:8px}.item b,.item span,.item small{display:block}.item b{font-size:13px}.item span{font-size:12px;margin:3px 0}.item small{color:#71807a;font-size:10px}.empty{padding:25px 0;text-align:center}
+    </style>
+    <header><div><h1>Entregas ao vivo</h1><p>Monitor do administrador</p></div><div class="count">${entregas.length} entregas</div></header>
+    ${itens}`;
+}
+
+function entrarNoPerfil(nome){
+  limparSessaoAdmin();
+  state.currentDriver = nome;
+  state.view = 'driverDashboard';
+  state.driverError = '';
+  salvarSessaoMotorista(nome);
+  render();
+}
+
+async function submitNewPassword(){
+  const p1 = document.getElementById('novaSenhaInput').value;
+  const p2 = document.getElementById('confirmSenhaInput').value;
+  if(!p1 || p1.length < 4){
+    state.driverError = 'A senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(p1 !== p2){
+    state.driverError = 'As senhas não coincidem.';
+    render();
+    return;
+  }
+  let existente = state.data.motoboys.find(m => m.nome.toLowerCase() === state.driverPendingName.toLowerCase());
+  if(existente){
+    existente.senha = p1;
+  }else{
+    state.data.motoboys.push({ nome: state.driverPendingName, senha: p1 });
+  }
+  salvarPerfilConhecido(state.driverPendingName);
+  entrarNoPerfil(state.driverPendingName);
+  saveData();
+}
+
+async function submitLoginPassword(){
+  const inp = document.getElementById('senhaLoginInput');
+  const senha = inp ? inp.value : '';
+  const m = state.data.motoboys.find(x => x.nome.toLowerCase() === state.driverPendingName.toLowerCase());
+  if(m && m.senha === senha){
+    salvarPerfilConhecido(m.nome);
+    entrarNoPerfil(m.nome);
+  }else{
+    state.driverError = 'Senha incorreta.';
+    render();
+  }
+}
+
+function goChangePassword(){
+  state.view = 'driverChangePassword';
+  state.changeError = '';
+  render();
+}
+
+function cancelChangePassword(){
+  state.view = 'driverDashboard';
+  state.changeError = '';
+  render();
+}
+
+async function submitChangePassword(){
+  const atual = document.getElementById('changeAtualInput').value;
+  const nova = document.getElementById('changeNovaInput').value;
+  const confirma = document.getElementById('changeConfirmaInput').value;
+  const m = state.data.motoboys.find(x => x.nome === state.currentDriver);
+  if(!m || m.senha !== atual){
+    state.changeError = 'Senha atual incorreta.';
+    render();
+    return;
+  }
+  if(!nova || nova.length < 4){
+    state.changeError = 'A nova senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(nova !== confirma){
+    state.changeError = 'As senhas novas não coincidem.';
+    render();
+    return;
+  }
+  m.senha = nova;
+  state.view = 'driverDashboard';
+  state.changeError = '';
+  render();
+  saveData();
+}
+
+function setNovoTipo(tipo){
+  state.novoTipo = tipo;
+  render();
+}
+
+function setDriverPeriodo(periodo){
+  state.driverPeriodo = periodo;
+  render();
+}
+
+async function enviarEntrega(){
+  const clienteInput = document.getElementById('clienteInput');
+  const cliente = (clienteInput ? clienteInput.value : state.novoCliente).trim();
+  if(!cliente){
+    state.driverError = 'Digite o nome do cliente.';
+    render();
+    return;
+  }
+  const nova = {
+    id: uid(),
+    motoboy: state.currentDriver,
+    cliente: cliente,
+    tipo: state.novoTipo,
+    valor: VALORES[state.novoTipo],
+    horario: new Date().toISOString()
+  };
+  state.data.entregas.push(nova);
+  // Limpa imediatamente para que o nome não reapareça durante a atualização
+  // assíncrona do Firebase (inclusive ao enviar pela tecla Enter).
+  state.novoCliente = '';
+  if(clienteInput) clienteInput.value = '';
+  state.novoTipo = 'cidade';
+  state.driverError = '';
+  render();
+  saveData();
+}
+
+function startEdit(id){
+  const item = state.data.entregas.find(e => e.id === id);
+  if(!item) return;
+  state.editingId = id;
+  state.editCliente = item.cliente;
+  state.editTipo = item.tipo;
+  state.confirmDeleteId = null;
+  render();
+}
+
+function cancelEdit(){
+  state.editingId = null;
+  render();
+}
+
+function setEditTipo(tipo){
+  state.editTipo = tipo;
+  render();
+}
+
+async function salvarEdit(id){
+  const inp = document.getElementById('editClienteInput_' + id);
+  const cliente = (inp ? inp.value : state.editCliente).trim();
+  if(!cliente) return;
+  const item = state.data.entregas.find(e => e.id === id);
+  if(item){
+    item.cliente = cliente;
+    item.tipo = state.editTipo;
+    item.valor = VALORES[state.editTipo];
+  }
+  state.editingId = null;
+  render();
+  if(item) saveData();
+}
+
+function askDelete(id){
+  state.confirmDeleteId = id;
+  render();
+}
+
+function cancelDelete(){
+  state.confirmDeleteId = null;
+  render();
+}
+
+function confirmDelete(id){
+  state.data.entregas = state.data.entregas.filter(e => e.id !== id);
+  state.confirmDeleteId = null;
+  render();
+  saveData();
+}
+
+function goAdminLogin(){
+  state.view = 'adminLogin';
+  state.adminError = '';
+  render();
+}
+
+function submitAdminPassword(){
+  const inp = document.getElementById('adminPasswordInput');
+  const senha = inp ? inp.value : '';
+  if(!state.dataReady){
+    state.adminError = 'Aguarde os dados terminarem de carregar.';
+    render();
+    return;
+  }
+  const senhaAdmin = state.adminSenha;
+  if(senha === senhaAdmin){
+    limparSessaoMotorista();
+    salvarSessaoAdmin();
+    state.view = 'adminDashboard';
+    state.adminError = '';
+    render();
+  }else{
+    state.adminError = 'Senha incorreta.';
+    render();
+  }
+}
+
+function goAdminChangePassword(){
+  state.view = 'adminChangePassword';
+  state.adminChangeError = '';
+  render();
+}
+
+function cancelAdminChangePassword(){
+  state.view = 'adminDashboard';
+  state.adminChangeError = '';
+  render();
+}
+
+async function submitAdminChangePassword(){
+  const atual = document.getElementById('adminChangeAtualInput').value;
+  const nova = document.getElementById('adminChangeNovaInput').value;
+  const confirma = document.getElementById('adminChangeConfirmaInput').value;
+  if(atual !== state.adminSenha){
+    state.adminChangeError = 'Senha atual incorreta.';
+    render();
+    return;
+  }
+  if(!nova || nova.length < 4){
+    state.adminChangeError = 'A nova senha deve ter pelo menos 4 caracteres.';
+    render();
+    return;
+  }
+  if(nova !== confirma){
+    state.adminChangeError = 'As senhas novas não coincidem.';
+    render();
+    return;
+  }
+  state.adminSenha = nova;
+  try{
+    await DOC_REF.update({ adminSenha: nova });
+  }catch(e){
+    console.error('Erro ao salvar nova senha do administrador', e);
+  }
+  state.view = 'adminDashboard';
+  state.adminChangeError = '';
+  render();
+}
+
+function toggleDriverSection(nome){
+  state.openDriverSection = state.openDriverSection === nome ? null : nome;
+  state.descontoErro = '';
+  state.confirmDeleteDescontoId = null;
+  state.confirmDeleteMotoboyNome = null;
+  render();
+}
+
+function setPeriodo(idx, periodo){
+  state.periodos[idx] = periodo;
+  render();
+}
+
+function aplicarFiltroHorario(idx){
+  const inicio = document.getElementById('turnoInicio_' + idx);
+  const fim = document.getElementById('turnoFim_' + idx);
+  state.horarios[idx] = { inicio: inicio ? inicio.value : '', fim: fim ? fim.value : '' };
+  render();
+}
+
+function limparFiltroHorario(idx){
+  state.horarios[idx] = { inicio: '', fim: '' };
+  render();
+}
+
+async function adicionarDesconto(idx){
+  const m = state.data.motoboys[idx];
+  if(!m) return;
+  const descInput = document.getElementById('descDescricao_' + idx);
+  const valInput = document.getElementById('descValor_' + idx);
+  const descricao = (descInput ? descInput.value : '').trim();
+  const valorStr = (valInput ? valInput.value : '').replace(',', '.').trim();
+  const valor = parseFloat(valorStr);
+  if(!descricao){
+    state.descontoErro = 'Digite uma descrição para o desconto (ex: sangria).';
+    render();
+    return;
+  }
+  if(isNaN(valor) || valor <= 0){
+    state.descontoErro = 'Digite um valor de desconto válido.';
+    render();
+    return;
+  }
+  state.data.descontos.push({ id: uid(), motoboy: m.nome, descricao, valor, data: new Date().toISOString() });
+  delete state.descInputs['d_' + idx];
+  delete state.descInputs['v_' + idx];
+  state.descontoErro = '';
+  render();
+  saveData();
+}
+
+function askDeleteDesconto(id){
+  state.confirmDeleteDescontoId = id;
+  render();
+}
+
+function cancelDeleteDesconto(){
+  state.confirmDeleteDescontoId = null;
+  render();
+}
+
+function confirmDeleteDesconto(id){
+  state.data.descontos = state.data.descontos.filter(d => d.id !== id);
+  state.confirmDeleteDescontoId = null;
+  render();
+  saveData();
+}
+
+function askDeleteMotoboy(nome){
+  state.confirmDeleteMotoboyNome = nome;
+  render();
+}
+
+function cancelDeleteMotoboy(){
+  state.confirmDeleteMotoboyNome = null;
+  render();
+}
+
+function confirmDeleteMotoboy(nome){
+  // Remove apenas o perfil (nome + senha). O histórico de entregas e
+  // descontos já lançados é mantido, para não perder os valores a pagar.
+  state.data.motoboys = state.data.motoboys.filter(m => m.nome !== nome);
+  if(state.openDriverSection === nome) state.openDriverSection = null;
+  state.confirmDeleteMotoboyNome = null;
+  render();
+  saveData();
+}
+
+function abrirRelatorio(idx){
+  const horario = getHorarioFiltro(idx);
+  state.relatorio = { idx, periodo: getPeriodo(idx), inicio: horario.inicio, fim: horario.fim };
+  state.view = 'adminReport';
+  render();
+}
+
+function fecharRelatorio(){
+  state.relatorio = null;
+  state.view = 'adminDashboard';
+  render();
+}
+
+function setRelatorioPeriodo(periodo){
+  state.relatorio.periodo = periodo;
+  state.periodos[state.relatorio.idx] = periodo;
+  render();
+}
+
+function imprimirRelatorio(){
+  window.print();
+}
+
+// ---------- renderização ----------
+
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){
+    app.innerHTML = '<div class="loading">Carregando...</div>';
+    return;
+  }
+
+  // guarda a posição do cursor do campo ativo, para não o perder
+  // caso a tela precise de ser reconstruída enquanto se escreve
+  const activo = document.activeElement;
+  const activoId = activo && activo.id;
+  let selStart = null;
+  let selEnd = null;
+  try{
+    if(activo && typeof activo.selectionStart === 'number'){
+      selStart = activo.selectionStart;
+      selEnd = activo.selectionEnd;
+    }
+  }catch(e){
+    // Campos como type="password" não suportam selectionStart/selectionEnd
+    // em vários navegadores (ex: Firefox, Safari) e lançam um erro ao lê-los.
+    selStart = null;
+    selEnd = null;
+  }
+
+  if(state.view === 'login') renderLogin(app);
+  else if(state.view === 'driverName') renderDriverName(app);
+  else if(state.view === 'driverSetPassword') renderDriverSetPassword(app);
+  else if(state.view === 'driverLoginPassword') renderDriverLoginPassword(app);
+  else if(state.view === 'driverChangePassword') renderDriverChangePassword(app);
+  else if(state.view === 'driverDashboard') renderDriverDashboard(app);
+  else if(state.view === 'adminLogin') renderAdminLogin(app);
+  else if(state.view === 'adminChangePassword') renderAdminChangePassword(app);
+  else if(state.view === 'adminDashboard') renderAdminDashboard(app);
+  else if(state.view === 'adminReport') renderAdminReport(app);
+
+  if(state.saveError){
+    app.insertAdjacentHTML('afterbegin', `<div class="error-msg">${escapeHtml(state.saveError)}</div>`);
+  }
+  if(state.liveAlert){
+    app.insertAdjacentHTML('beforeend', `<div class="live-alert" role="status"><b>Nova entrega recebida</b>${escapeHtml(state.liveAlert.mensagem)}</div>`);
+  }
+  atualizarMiniTela();
+
+  if(activoId){
+    const el = document.getElementById(activoId);
+    if(el && el !== document.activeElement){
+      el.focus();
+      if(selStart !== null && el.setSelectionRange){
+        try{ el.setSelectionRange(selStart, selEnd); }catch(e){}
+      }
+    }
+  }
+}
+
+function renderLogin(app){
+  app.innerHTML = `
+    <div>
+      <div class="brand">Registo de Entregas</div>
+      <div class="brand-sub">Controle de entregas dos motoboys</div>
+      <button class="tile tile-driver" onclick="goDriverName()">
+        Sou entregador
+        <small>Registar as minhas entregas</small>
+      </button>
+      <button class="tile tile-admin" onclick="goAdminLogin()">
+        Sou administrador
+        <small>Ver entregas de todos os entregadores</small>
+      </button>
+    </div>
+    <div class="footer-note">Os dados ficam guardados e são partilhados entre todos os dispositivos que abrirem esta aplicação.</div>
+  `;
+}
+
+function renderDriverName(app){
+  const conhecido = (perfilConhecido() || '').toLowerCase();
+  const perfis = state.data.motoboys
+    .map((m, idx) => ({ m, idx }))
+    .sort((a, b) => a.m.nome.localeCompare(b.m.nome, 'pt-BR'))
+    .map(({ m, idx }) => {
+      const ehConhecido = m.nome.toLowerCase() === conhecido;
+      return `<button class="tile ${ehConhecido ? 'tile-driver' : 'tile-admin'}" style="margin-bottom:10px; padding:16px; font-size:16px;" onclick="selecionarMotorista(${idx})">
+        ${escapeHtml(m.nome)}
+        <small>${ehConhecido ? 'Este é o meu perfil — entrar sem senha' : 'Toque para entrar com senha'}</small>
+      </button>`;
+    }).join('');
+
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="goLogin()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Perfil do entregador</div>
+      <div class="brand-sub">Escolha o seu perfil. Neste aparelho, o último perfil confirmado entra sem pedir senha.</div>
+      ${perfis ? `<div style="margin-bottom:18px;">${perfis}</div>` : '<div class="empty">Ainda não há entregadores registados.</div>'}
+      <div class="card">
+        <label for="driverNameInput">Novo entregador</label>
+        <input type="text" id="driverNameInput" placeholder="Digite um nome novo" value="${escapeHtml(state.driverInput)}" onkeydown="if(event.key==='Enter') submitDriverName()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitDriverName()">Criar perfil</button>
+      </div>
+    </div>
+  `;
+  if(state.data.motoboys.length === 0) document.getElementById('driverNameInput').focus();
+}
+
+function renderDriverSetPassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="goDriverName()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Criar senha</div>
+      <div class="brand-sub">Olá, ${escapeHtml(state.driverPendingName)}! Crie uma senha para proteger o seu perfil. Só será pedida de novo no dia seguinte.</div>
+      <div class="card">
+        <label for="novaSenhaInput">Senha</label>
+        <input type="password" id="novaSenhaInput" placeholder="Mínimo 4 caracteres">
+        <label for="confirmSenhaInput">Confirmar senha</label>
+        <input type="password" id="confirmSenhaInput" placeholder="Repita a senha" onkeydown="if(event.key==='Enter') submitNewPassword()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitNewPassword()">Criar perfil</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('novaSenhaInput').focus();
+}
+
+function renderDriverLoginPassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="goDriverName()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Olá, ${escapeHtml(state.driverPendingName)}</div>
+      <div class="brand-sub">Digite a sua senha para entrar. Amanhã ela será pedida de novo.</div>
+      <div class="card">
+        <label for="senhaLoginInput">Senha</label>
+        <input type="password" id="senhaLoginInput" placeholder="••••" onkeydown="if(event.key==='Enter') submitLoginPassword()">
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitLoginPassword()">Entrar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('senhaLoginInput').focus();
+}
+
+function renderDriverChangePassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="cancelChangePassword()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Alterar senha</div>
+      <div class="brand-sub">Confirme a senha atual e escolha a nova.</div>
+      <div class="card">
+        <label for="changeAtualInput">Senha atual</label>
+        <input type="password" id="changeAtualInput" placeholder="••••">
+        <label for="changeNovaInput">Nova senha</label>
+        <input type="password" id="changeNovaInput" placeholder="Mínimo 4 caracteres">
+        <label for="changeConfirmaInput">Confirmar nova senha</label>
+        <input type="password" id="changeConfirmaInput" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter') submitChangePassword()">
+        ${state.changeError ? `<div class="error-msg">${state.changeError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitChangePassword()">Guardar nova senha</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('changeAtualInput').focus();
+}
+
+function renderDriverDashboard(app){
+  const minhasTodas = state.data.entregas
+    .filter(e => e.motoboy === state.currentDriver)
+    .sort((a,b) => new Date(b.horario) - new Date(a.horario));
+  const periodo = state.driverPeriodo || 'semana';
+  const minhas = filterByPeriod(minhasTodas, periodo, 'horario');
+  const total = minhas.reduce((s,e) => s + e.valor, 0);
+
+  let listaHtml = '';
+  if(minhas.length === 0){
+    listaHtml = minhasTodas.length === 0
+      ? '<div class="empty">Ainda não há entregas registadas.</div>'
+      : '<div class="empty">Nenhuma entrega neste período.</div>';
+  }else{
+    listaHtml = minhas.map(e => renderEntregaItem(e)).join('');
+  }
+
+  app.innerHTML = `
+    <div>
+      <div class="topbar">
+        <h1>Olá, ${escapeHtml(state.currentDriver)}</h1>
+        <div class="header-actions">
+          <button class="header-action" onclick="goChangePassword()" aria-label="Alterar senha" title="Alterar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="11" x="5" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
+          <button class="header-action exit" onclick="goLogin()" aria-label="Sair" title="Sair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/></svg></button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><b>${minhas.length}</b><span>entregas</span></div>
+        <div class="stat"><b>${formatMoney(total)}</b><span>a receber</span></div>
+      </div>
+
+      <div class="period-row" aria-label="Filtro de período das entregas">
+        <button class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setDriverPeriodo('dia')">Diário</button>
+        <button class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setDriverPeriodo('semana')">Semanal</button>
+        <button class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setDriverPeriodo('mes')">Mensal</button>
+      </div>
+
+      <div class="card">
+        <label>Nome do cliente</label>
+        <input type="text" id="clienteInput" placeholder="Ex: Maria Silva" value="${escapeHtml(state.novoCliente)}" onkeydown="if(event.key==='Enter') enviarEntrega()">
+        <label>Tipo de entrega</label>
+        <div class="type-row">
+          <div class="type-btn ${state.novoTipo==='cidade' ? 'active-cidade' : ''}" onclick="setNovoTipo('cidade')">
+            Cidade<span>${formatMoney(VALORES.cidade)}</span>
+          </div>
+          <div class="type-btn ${state.novoTipo==='estrada' ? 'active-estrada' : ''}" onclick="setNovoTipo('estrada')">
+            Estrada<span>${formatMoney(VALORES.estrada)}</span>
+          </div>
+        </div>
+        ${state.driverError ? `<div class="error-msg">${state.driverError}</div>` : ''}
+        <button class="btn btn-primary" onclick="enviarEntrega()">Enviar entrega</button>
+      </div>
+
+      <h2 style="font-size:15px; margin: 4px 0 10px;">Minhas entregas · ${periodoLabel(periodo)}</h2>
+      ${listaHtml}
+    </div>
+  `;
+  const ci = document.getElementById('clienteInput');
+  if(ci) ci.focus();
+}
+
+function renderEntregaItem(e){
+  const isEditing = state.editingId === e.id;
+  const isConfirmingDelete = state.confirmDeleteId === e.id;
+
+  if(isEditing){
+    return `
+      <div class="entrega-item">
+        <label>Cliente</label>
+        <input type="text" id="editClienteInput_${e.id}" value="${escapeHtml(state.editCliente)}">
+        <label>Tipo de entrega</label>
+        <div class="type-row">
+          <div class="type-btn ${state.editTipo==='cidade' ? 'active-cidade' : ''}" onclick="setEditTipo('cidade')">
+            Cidade<span>${formatMoney(VALORES.cidade)}</span>
+          </div>
+          <div class="type-btn ${state.editTipo==='estrada' ? 'active-estrada' : ''}" onclick="setEditTipo('estrada')">
+            Estrada<span>${formatMoney(VALORES.estrada)}</span>
+          </div>
+        </div>
+        <div class="entrega-actions">
+          <button class="mini-btn mini-edit" onclick="salvarEdit('${e.id}')">Guardar</button>
+          <button class="mini-btn mini-del" onclick="cancelEdit()">Cancelar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="entrega-item">
+      <div class="entrega-top">
+        <div>
+          <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
+          <div class="entrega-meta">${formatHorario(e.horario)}</div>
+        </div>
+        <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
+      </div>
+      <div class="entrega-valor">${formatMoney(e.valor)}</div>
+      <div class="entrega-actions">
+        ${isConfirmingDelete ? `
+          <button class="mini-btn mini-confirm" onclick="confirmDelete('${e.id}')">Confirmar apagar</button>
+          <button class="mini-btn mini-del" onclick="cancelDelete()">Cancelar</button>
+        ` : `
+          <button class="mini-btn mini-edit" onclick="startEdit('${e.id}')">Ajustar</button>
+          <button class="mini-btn mini-del" onclick="askDelete('${e.id}')">Apagar</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminLogin(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="goLogin()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Acesso do administrador</div>
+      <div class="brand-sub">Digite a senha para ver as entregas de todos os entregadores.</div>
+      <div class="card">
+        <label for="adminPasswordInput">Senha</label>
+        <input type="password" id="adminPasswordInput" placeholder="••••" onkeydown="if(event.key==='Enter') submitAdminPassword()">
+        ${state.adminError ? `<div class="error-msg">${state.adminError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitAdminPassword()">Entrar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('adminPasswordInput').focus();
+}
+
+function renderAdminChangePassword(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="cancelAdminChangePassword()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Alterar senha do administrador</div>
+      <div class="brand-sub">Confirme a senha atual e escolha a nova.</div>
+      <div class="card">
+        <label for="adminChangeAtualInput">Senha atual</label>
+        <input type="password" id="adminChangeAtualInput" placeholder="••••">
+        <label for="adminChangeNovaInput">Nova senha</label>
+        <input type="password" id="adminChangeNovaInput" placeholder="Mínimo 4 caracteres">
+        <label for="adminChangeConfirmaInput">Confirmar nova senha</label>
+        <input type="password" id="adminChangeConfirmaInput" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter') submitAdminChangePassword()">
+        ${state.adminChangeError ? `<div class="error-msg">${state.adminChangeError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitAdminChangePassword()">Guardar nova senha</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('adminChangeAtualInput').focus();
+}
+
+function renderAdminDashboard(app){
+  const motoboys = state.data.motoboys;
+  const todas = state.data.entregas;
+  const todosDescontos = state.data.descontos;
+  const totalBrutoGeral = todas.reduce((s,e) => s + e.valor, 0);
+  const totalDescontosGeral = todosDescontos.reduce((s,d) => s + d.valor, 0);
+  const totalLiquidoGeral = totalBrutoGeral - totalDescontosGeral;
+
+  let corpo = '';
+  if(motoboys.length === 0){
+    corpo = '<div class="empty">Ainda não há entregadores registados.</div>';
+  }else{
+    corpo = motoboys.map((m, idx) => {
+      const nome = m.nome;
+      const entregasTodas = todas
+        .filter(e => e.motoboy === nome)
+        .sort((a,b) => new Date(b.horario) - new Date(a.horario));
+      const descontosTodos = todosDescontos
+        .filter(d => d.motoboy === nome)
+        .sort((a,b) => new Date(b.data) - new Date(a.data));
+      const totalBrutoAll = entregasTodas.reduce((s,e) => s + e.valor, 0);
+      const totalDescontosAll = descontosTodos.reduce((s,d) => s + d.valor, 0);
+      const totalLiquidoAll = totalBrutoAll - totalDescontosAll;
+
+      const aberto = state.openDriverSection === nome;
+      const periodo = getPeriodo(idx);
+      const horario = getHorarioFiltro(idx);
+      const entregasPeriodo = filterByHour(filterByPeriod(entregasTodas, periodo, 'horario'), horario.inicio, horario.fim, 'horario');
+      const descontosPeriodo = filterByHour(filterByPeriod(descontosTodos, periodo, 'data'), horario.inicio, horario.fim, 'data');
+      const totalBrutoPeriodo = entregasPeriodo.reduce((s,e) => s + e.valor, 0);
+      const totalDescontosPeriodo = descontosPeriodo.reduce((s,d) => s + d.valor, 0);
+      const totalLiquidoPeriodo = totalBrutoPeriodo - totalDescontosPeriodo;
+
+      let corpoAberto = '';
+      if(aberto){
+        const itensEntregas = entregasPeriodo.length === 0
+          ? '<div class="empty">Sem entregas neste período.</div>'
+          : entregasPeriodo.map(e => `
+              <div class="entrega-item">
+                <div class="entrega-top">
+                  <div>
+                    <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
+                    <div class="entrega-meta">${formatHorario(e.horario)}</div>
+                  </div>
+                  <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
+                </div>
+                <div class="entrega-valor">${formatMoney(e.valor)}</div>
+              </div>
+            `).join('');
+
+        const itensDescontos = descontosPeriodo.length === 0
+          ? '<div class="empty">Nenhum desconto lançado.</div>'
+          : descontosPeriodo.map(d => `
+              <div class="entrega-item">
+                <div class="entrega-top">
+                  <div>
+                    <div class="entrega-cliente">${escapeHtml(d.descricao)}</div>
+                    <div class="entrega-meta">${formatHorario(d.data)}</div>
+                  </div>
+                  <span class="badge badge-desconto">Desconto</span>
+                </div>
+                <div class="entrega-valor" style="color: var(--tomato);">- ${formatMoney(d.valor)}</div>
+                <div class="entrega-actions">
+                  ${state.confirmDeleteDescontoId === d.id ? `
+                    <button class="mini-btn mini-confirm" onclick="confirmDeleteDesconto('${d.id}')">Confirmar remover</button>
+                    <button class="mini-btn mini-del" onclick="cancelDeleteDesconto()">Cancelar</button>
+                  ` : `
+                    <button class="mini-btn mini-del" onclick="askDeleteDesconto('${d.id}')">Remover</button>
+                  `}
+                </div>
+              </div>
+            `).join('');
+
+        corpoAberto = `
+          <div class="driver-body">
+            <div class="period-row">
+              <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setPeriodo(${idx},'dia')">Diário</div>
+              <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setPeriodo(${idx},'semana')">Semanal</div>
+              <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setPeriodo(${idx},'mes')">Mensal</div>
+            </div>
+            <div class="section-title">Filtrar por turno (opcional)</div>
+            <div class="time-filter">
+              <label>Início<input type="time" id="turnoInicio_${idx}" value="${horario.inicio}"></label>
+              <label>Fim<input type="time" id="turnoFim_${idx}" value="${horario.fim}"></label>
+            </div>
+            <div class="time-filter-actions">
+              <button class="btn btn-secondary" onclick="aplicarFiltroHorario(${idx})">Aplicar horário</button>
+              ${(horario.inicio || horario.fim) ? `<button class="btn btn-secondary" onclick="limparFiltroHorario(${idx})">Limpar</button>` : ''}
+            </div>
+            <div class="stat-row">
+              <div class="stat"><b>${formatMoney(totalBrutoPeriodo)}</b><span>bruto no período</span></div>
+              <div class="stat"><b>-${formatMoney(totalDescontosPeriodo)}</b><span>descontos</span></div>
+              <div class="stat"><b>${formatMoney(totalLiquidoPeriodo)}</b><span>a pagar</span></div>
+            </div>
+            <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirRelatorio(${idx})">Gerar relatório</button>
+
+            <div class="section-title">Entregas no período selecionado${horario.inicio || horario.fim ? ` · ${horario.inicio || '00:00'} às ${horario.fim || '23:59'}` : ''}</div>
+            ${itensEntregas}
+
+            <div class="section-title">Lançar desconto (ex: sangria)</div>
+            <label>Descrição</label>
+            <input type="text" id="descDescricao_${idx}" placeholder="Ex: Sangria do dia" value="${escapeHtml(state.descInputs['d_'+idx] || '')}">
+            <label>Valor (R$)</label>
+            <input type="text" id="descValor_${idx}" placeholder="Ex: 20" inputmode="decimal" value="${escapeHtml(state.descInputs['v_'+idx] || '')}">
+            ${state.descontoErro ? `<div class="error-msg">${state.descontoErro}</div>` : ''}
+            <button class="btn btn-secondary" onclick="adicionarDesconto(${idx})">Adicionar desconto</button>
+
+            <div class="section-title">Descontos no período selecionado</div>
+            ${itensDescontos}
+
+            <div class="section-title" style="color: var(--tomato);">Zona de risco</div>
+            ${state.confirmDeleteMotoboyNome === nome ? `
+              <div class="error-msg">Tem certeza? O perfil e a senha de ${escapeHtml(nome)} serão apagados (o histórico de entregas e descontos é mantido).</div>
+              <div class="entrega-actions">
+                <button class="mini-btn mini-confirm" onclick="confirmDeleteMotoboy('${escapeAttr(nome)}')">Confirmar exclusão</button>
+                <button class="mini-btn mini-del" onclick="cancelDeleteMotoboy()">Cancelar</button>
+              </div>
+            ` : `
+              <button class="btn btn-secondary" style="color: var(--tomato); border-color:#facfc8;" onclick="askDeleteMotoboy('${escapeAttr(nome)}')">Excluir perfil deste entregador</button>
+            `}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="driver-section">
+          <div class="driver-header" onclick="toggleDriverSection('${escapeAttr(nome)}')">
+            <b>${escapeHtml(nome)} · ${entregasTodas.length} entrega${entregasTodas.length===1?'':'s'}</b>
+            <span class="amount">${formatMoney(totalLiquidoAll)}</span>
+          </div>
+          ${corpoAberto}
+        </div>
+      `;
+    }).join('');
+  }
+
+  app.innerHTML = `
+    <div>
+      <div class="topbar">
+        <h1>Painel do administrador</h1>
+        <div class="header-actions">
+          <button class="header-action" onclick="goAdminChangePassword()" aria-label="Alterar senha" title="Alterar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="11" x="5" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
+          <button class="header-action exit" onclick="goLogin()" aria-label="Sair" title="Sair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/></svg></button>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b>${motoboys.length}</b><span>entregadores</span></div>
+        <div class="stat"><b>${todas.length}</b><span>entregas</span></div>
+        <div class="stat"><b>${formatMoney(totalLiquidoGeral)}</b><span>total a pagar</span></div>
+      </div>
+      <div class="card alert-control">
+        <div class="alert-control-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></div>
+        <div class="alert-control-copy"><b>Alertas de novas entregas</b>${state.adminAlerts ? 'Ativos neste navegador.' : 'Receba um pop-up mesmo trabalhando em outra aba.'}${state.adminAlertError ? `<br><span style="color:var(--tomato);">${escapeHtml(state.adminAlertError)}</span>` : ''}</div>
+        <button class="btn btn-secondary" onclick="abrirMiniTela()">${miniTela && !miniTela.closed ? 'Aberta' : 'Mini tela'}</button>
+        ${state.adminAlerts ? '<button class="btn btn-secondary" onclick="desativarAlertasAdmin()">Desativar</button>' : '<button class="btn btn-secondary" onclick="ativarAlertasAdmin()">Ativar</button>'}
+      </div>
+      ${corpo}
+    </div>
+  `;
+}
+
+function renderAdminReport(app){
+  const idx = state.relatorio.idx;
+  const m = state.data.motoboys[idx];
+  if(!m){
+    fecharRelatorio();
+    return;
+  }
+  const periodo = state.relatorio.periodo;
+  const inicio = state.relatorio.inicio || '';
+  const fim = state.relatorio.fim || '';
+
+  const entregasM = state.data.entregas.filter(e => e.motoboy === m.nome);
+  const descontosM = state.data.descontos.filter(d => d.motoboy === m.nome);
+  const entregasP = filterByHour(filterByPeriod(entregasM, periodo, 'horario'), inicio, fim, 'horario').sort((a,b) => new Date(a.horario) - new Date(b.horario));
+  const descontosP = filterByHour(filterByPeriod(descontosM, periodo, 'data'), inicio, fim, 'data').sort((a,b) => new Date(a.data) - new Date(b.data));
+
+  const totalBruto = entregasP.reduce((s,e) => s + e.valor, 0);
+  const totalDesc = descontosP.reduce((s,d) => s + d.valor, 0);
+  const totalLiquido = totalBruto - totalDesc;
+
+  const linhasEntregas = entregasP.length === 0
+    ? `<tr><td colspan="4" style="color:var(--ink-soft);">Nenhuma entrega neste período.</td></tr>`
+    : entregasP.map(e => `
+        <tr>
+          <td>${formatHorario(e.horario)}</td>
+          <td>${escapeHtml(e.cliente)}</td>
+          <td>${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</td>
+          <td>${formatMoney(e.valor)}</td>
+        </tr>
+      `).join('');
+
+  const linhasDescontos = descontosP.length === 0
+    ? `<tr><td colspan="3" style="color:var(--ink-soft);">Nenhum desconto neste período.</td></tr>`
+    : descontosP.map(d => `
+        <tr>
+          <td>${formatHorario(d.data)}</td>
+          <td>${escapeHtml(d.descricao)}</td>
+          <td>- ${formatMoney(d.valor)}</td>
+        </tr>
+      `).join('');
+
+  app.innerHTML = `
+    <div>
+      <div class="no-print" style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px;">
+        <button class="back-btn" onclick="fecharRelatorio()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+        <button class="btn-ghost" onclick="imprimirRelatorio()">Imprimir / guardar PDF</button>
+      </div>
+
+      <div class="period-row no-print">
+        <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setRelatorioPeriodo('dia')">Diário</div>
+        <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setRelatorioPeriodo('semana')">Semanal</div>
+        <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setRelatorioPeriodo('mes')">Mensal</div>
+      </div>
+
+      <div class="print-area card">
+        <div class="brand" style="font-size:20px;">Relatório de entregas</div>
+        <div class="brand-sub" style="margin-bottom:4px;">Entregador: <strong>${escapeHtml(m.nome)}</strong></div>
+        <div class="brand-sub" style="margin-bottom:20px;">${periodoLabel(periodo)}${inicio || fim ? ` · Turno: ${inicio || '00:00'} às ${fim || '23:59'}` : ''}</div>
+
+        <div class="section-title">Entregas</div>
+        <table class="report-table">
+          <thead><tr><th>Data/hora</th><th>Cliente</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <tbody>${linhasEntregas}</tbody>
+        </table>
+
+        <div class="section-title">Descontos</div>
+        <table class="report-table">
+          <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead>
+          <tbody>${linhasDescontos}</tbody>
+        </table>
+
+        <div class="report-total-row"><span>Total bruto</span><span>${formatMoney(totalBruto)}</span></div>
+        <div class="report-total-row"><span>Total de descontos</span><span>- ${formatMoney(totalDesc)}</span></div>
+        <div class="report-total-row net"><span>Total a pagar</span><span>${formatMoney(totalLiquido)}</span></div>
+
+        <div class="footer-note" style="text-align:left; margin-top:20px;">Gerado em ${formatHorario(new Date().toISOString())}</div>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escapeAttr(str){ return escapeHtml(str).replace(/`/g, '&#96;'); }
+
+// captura o valor digitado enquanto o utilizador escreve, para não se perder ao voltar a renderizar
+document.addEventListener('input', function(ev){
+  const id = ev.target.id;
+  if(id === 'driverNameInput') state.driverInput = ev.target.value;
+  if(id === 'clienteInput') state.novoCliente = ev.target.value;
+  if(id && id.startsWith('editClienteInput_')) state.editCliente = ev.target.value;
+  if(id && id.startsWith('descDescricao_')) state.descInputs['d_' + id.split('_')[1]] = ev.target.value;
+  if(id && id.startsWith('descValor_')) state.descInputs['v_' + id.split('_')[1]] = ev.target.value;
+});
+
+(async function init(){
+  await inicializarFirebase();
+})();
+</script>
+</body>
+</html>
