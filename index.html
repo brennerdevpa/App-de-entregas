@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg: #f4f7f5;
@@ -426,7 +427,10 @@ let state = {
   confirmDeleteId: null,
   adminPasswordInput: '',
   adminError: '',
-  adminSenha: '1234',
+  adminSenha: null,
+  adminSenhaHash: null,
+  adminSenhaSalt: null,
+  adminSetupError: '',
   adminChangeError: '',
   adminAlerts: (() => { try{ return localStorage.getItem('appmotoboys_alertas_admin') === '1'; }catch(e){ return false; } })(),
   adminAlertError: '',
@@ -452,6 +456,67 @@ function todayStr(){
 }
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+// ---------- hash de senhas (SHA-256 + salt) ----------
+
+function sha256(msg) {
+  function rr(v, n) { return (v >>> n) | (v << (32 - n)); }
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function utf8(s) {
+    const b = [];
+    for (let i = 0; i < s.length; i++) {
+      let c = s.charCodeAt(i);
+      if (c < 128) b.push(c);
+      else if (c < 2048) { b.push(192 | (c >> 6)); b.push(128 | (c & 63)); }
+      else if (c >= 55296 && c <= 56319) {
+        const n = s.charCodeAt(++i);
+        c = ((c & 1023) << 10) + (n & 1023) + 65536;
+        b.push(240 | (c >> 18)); b.push(128 | ((c >> 12) & 63)); b.push(128 | ((c >> 6) & 63)); b.push(128 | (c & 63));
+      } else { b.push(224 | (c >> 12)); b.push(128 | ((c >> 6) & 63)); b.push(128 | (c & 63)); }
+    }
+    return b;
+  }
+  const M = utf8(msg), bl = M.length * 8;
+  M.push(128); while (M.length % 64 !== 56) M.push(0);
+  for (let i = 7; i >= 0; i--) M.push((bl / Math.pow(2, i * 8)) & 255);
+  let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  for (let o = 0; o < M.length; o += 64) {
+    const w = new Array(64);
+    for (let i = 0; i < 16; i++) w[i] = (M[o + i * 4] << 24) | (M[o + i * 4 + 1] << 16) | (M[o + i * 4 + 2] << 8) | M[o + i * 4 + 3];
+    for (let i = 16; i < 64; i++) {
+      const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let i = 0; i < 64; i++) {
+      const S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25), ch = (e & f) ^ (~e & g), t1 = (h + S1 + ch + K[i] + w[i]) | 0;
+      const S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  return H.map(v => (v >>> 0).toString(16).padStart(8, '0')).join('');
+}
+function gerarSal() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+}
+function hashSenha(s, sal) { return sha256(sal + ':' + s); }
+function senhaValida(m, s) {
+  if (m && m.senhaHash && m.senhaSalt) return hashSenha(s, m.senhaSalt) === m.senhaHash;
+  return !!(m && m.senha && m.senha === s);
+}
+function senhaAdminValida(s) {
+  if (state.adminSenhaHash && state.adminSenhaSalt) return hashSenha(s, state.adminSenhaSalt) === state.adminSenhaHash;
+  if (state.adminSenha) return s === state.adminSenha;
+  return false;
+}
+function temSenhaAdmin() {
+  return !!(state.adminSenhaHash || state.adminSenha);
+}
 
 function formatMoney(v){
   const valor = Number(v);
@@ -570,7 +635,9 @@ function normalizarDados(){
     .map(d => ({ ...d, valor: Number(d.valor) || 0 }));
   state.data.mensagens = state.data.mensagens
     .filter(m => m && m.id && m.texto);
-  state.adminSenha = state.data.adminSenha || '1234';
+  state.adminSenhaHash = state.data.adminSenhaHash || null;
+  state.adminSenhaSalt = state.data.adminSenhaSalt || null;
+  state.adminSenha = state.data.adminSenha || null;
 }
 
 let inicializacaoConcluida = false;
@@ -590,6 +657,17 @@ async function inicializarFirebase(){
   }
 
   iniciarListener();
+
+  if(firebase.auth){
+    try{
+      await firebase.auth().signInAnonymously();
+    }catch(e){
+      console.error('Falha na autenticação anónima', e);
+      state.saveError = 'Falha na autenticação com o Firebase. Confirme que o método "Anonymous" está ativado na consola do Firebase.';
+      render();
+    }
+  }
+
   let snap = null;
   try{
     snap = await DOC_REF.once('value');
@@ -788,7 +866,7 @@ async function submitDriverName(nomeSelecionado = ''){
     return;
   }
 
-  if(!existente || !existente.senha){
+  if(!existente || (!existente.senha && !existente.senhaHash)){
     state.view = 'driverSetPassword';
     state.driverError = '';
     render();
@@ -904,7 +982,8 @@ async function enviarMensagem(){
   render();
 }
 
-async function confirmarMensagem(id){
+async function confirmarMensagem(btn){
+  const id = btn.getAttribute('data-id');
   state.data.mensagens = state.data.mensagens.filter(m => m.id !== id);
   await saveData();
   render();
@@ -988,10 +1067,14 @@ async function submitNewPassword(){
     return;
   }
   let existente = state.data.motoboys.find(m => m.nome.toLowerCase() === state.driverPendingName.toLowerCase());
+  const sal = gerarSal();
+  const senhaHash = hashSenha(p1, sal);
   if(existente){
-    existente.senha = p1;
+    existente.senhaHash = senhaHash;
+    existente.senhaSalt = sal;
+    delete existente.senha;
   }else{
-    state.data.motoboys.push({ nome: state.driverPendingName, senha: p1 });
+    state.data.motoboys.push({ nome: state.driverPendingName, senhaHash, senhaSalt: sal });
   }
   await saveData();
   salvarPerfilConhecido(state.driverPendingName);
@@ -1002,7 +1085,14 @@ async function submitLoginPassword(){
   const inp = document.getElementById('senhaLoginInput');
   const senha = inp ? inp.value : '';
   const m = state.data.motoboys.find(x => x.nome.toLowerCase() === state.driverPendingName.toLowerCase());
-  if(m && m.senha === senha){
+  if(m && senhaValida(m, senha)){
+    if(!m.senhaHash && m.senha){
+      const sal = gerarSal();
+      m.senhaHash = hashSenha(senha, sal);
+      m.senhaSalt = sal;
+      delete m.senha;
+      await saveData();
+    }
     salvarPerfilConhecido(m.nome);
     entrarNoPerfil(m.nome);
   }else{
@@ -1028,7 +1118,7 @@ async function submitChangePassword(){
   const nova = document.getElementById('changeNovaInput').value;
   const confirma = document.getElementById('changeConfirmaInput').value;
   const m = state.data.motoboys.find(x => x.nome === state.currentDriver);
-  if(!m || m.senha !== atual){
+  if(!m || !senhaValida(m, atual)){
     state.changeError = 'Senha atual incorreta.';
     render();
     return;
@@ -1043,7 +1133,10 @@ async function submitChangePassword(){
     render();
     return;
   }
-  m.senha = nova;
+  const sal = gerarSal();
+  m.senhaHash = hashSenha(nova, sal);
+  m.senhaSalt = sal;
+  delete m.senha;
   await saveData();
   state.view = 'driverDashboard';
   state.changeError = '';
@@ -1087,7 +1180,8 @@ async function enviarEntrega(){
   render();
 }
 
-async function avisarFrente(id){
+async function avisarFrente(btn){
+  const id = btn.getAttribute('data-id');
   const item = state.data.entregas.find(e => e.id === id);
   if(!item) return;
   item.aviso = avisoAtivo(item) ? null : Date.now();
@@ -1095,7 +1189,8 @@ async function avisarFrente(id){
   render();
 }
 
-function startEdit(id){
+function startEdit(btn){
+  const id = btn.getAttribute('data-id');
   const item = state.data.entregas.find(e => e.id === id);
   if(!item) return;
   state.editingId = id;
@@ -1115,7 +1210,8 @@ function setEditTipo(tipo){
   render();
 }
 
-async function salvarEdit(id){
+async function salvarEdit(btn){
+  const id = btn.getAttribute('data-id');
   const inp = document.getElementById('editClienteInput_' + id);
   const cliente = (inp ? inp.value : state.editCliente).trim();
   if(!cliente) return;
@@ -1130,8 +1226,8 @@ async function salvarEdit(id){
   render();
 }
 
-function askDelete(id){
-  state.confirmDeleteId = id;
+function askDelete(btn){
+  state.confirmDeleteId = btn.getAttribute('data-id');
   render();
 }
 
@@ -1140,7 +1236,8 @@ function cancelDelete(){
   render();
 }
 
-async function confirmDelete(id){
+async function confirmDelete(btn){
+  const id = btn.getAttribute('data-id');
   state.data.entregas = state.data.entregas.filter(e => e.id !== id);
   await saveData();
   state.confirmDeleteId = null;
@@ -1148,8 +1245,9 @@ async function confirmDelete(id){
 }
 
 function goAdminLogin(){
-  state.view = 'adminLogin';
   state.adminError = '';
+  state.adminSetupError = '';
+  state.view = temSenhaAdmin() ? 'adminLogin' : 'adminSetup';
   render();
 }
 
@@ -1161,8 +1259,17 @@ function submitAdminPassword(){
     render();
     return;
   }
-  const senhaAdmin = state.adminSenha;
-  if(senha === senhaAdmin){
+  if(senhaAdminValida(senha)){
+    if(!state.adminSenhaHash && state.adminSenha){
+      const sal = gerarSal();
+      state.data.adminSenhaHash = hashSenha(senha, sal);
+      state.data.adminSenhaSalt = sal;
+      delete state.data.adminSenha;
+      state.adminSenhaHash = state.data.adminSenhaHash;
+      state.adminSenhaSalt = state.data.adminSenhaSalt;
+      state.adminSenha = null;
+      saveData();
+    }
     limparSessaoMotorista();
     salvarSessaoAdmin();
     state.view = 'adminDashboard';
@@ -1190,13 +1297,13 @@ async function submitAdminChangePassword(){
   const atual = document.getElementById('adminChangeAtualInput').value;
   const nova = document.getElementById('adminChangeNovaInput').value;
   const confirma = document.getElementById('adminChangeConfirmaInput').value;
-  if(atual !== state.adminSenha){
+  if(!senhaAdminValida(atual)){
     state.adminChangeError = 'Senha atual incorreta.';
     render();
     return;
   }
-  if(!nova || nova.length < 4){
-    state.adminChangeError = 'A nova senha deve ter pelo menos 4 caracteres.';
+  if(!nova || nova.length < 8){
+    state.adminChangeError = 'A nova senha deve ter pelo menos 8 caracteres.';
     render();
     return;
   }
@@ -1205,18 +1312,21 @@ async function submitAdminChangePassword(){
     render();
     return;
   }
-  state.adminSenha = nova;
-  try{
-    await DOC_REF.update({ adminSenha: nova });
-  }catch(e){
-    console.error('Erro ao salvar nova senha do administrador', e);
-  }
+  const sal = gerarSal();
+  state.data.adminSenhaHash = hashSenha(nova, sal);
+  state.data.adminSenhaSalt = sal;
+  delete state.data.adminSenha;
+  state.adminSenhaHash = state.data.adminSenhaHash;
+  state.adminSenhaSalt = state.data.adminSenhaSalt;
+  state.adminSenha = null;
+  await saveData();
   state.view = 'adminDashboard';
   state.adminChangeError = '';
   render();
 }
 
-function toggleDriverSection(nome){
+function toggleDriverSection(btn){
+  const nome = btn.getAttribute('data-nome');
   state.openDriverSection = state.openDriverSection === nome ? null : nome;
   state.descontoErro = '';
   state.confirmDeleteDescontoId = null;
@@ -1266,8 +1376,8 @@ async function adicionarDesconto(idx){
   render();
 }
 
-function askDeleteDesconto(id){
-  state.confirmDeleteDescontoId = id;
+function askDeleteDesconto(btn){
+  state.confirmDeleteDescontoId = btn.getAttribute('data-id');
   render();
 }
 
@@ -1276,15 +1386,16 @@ function cancelDeleteDesconto(){
   render();
 }
 
-async function confirmDeleteDesconto(id){
+async function confirmDeleteDesconto(btn){
+  const id = btn.getAttribute('data-id');
   state.data.descontos = state.data.descontos.filter(d => d.id !== id);
   await saveData();
   state.confirmDeleteDescontoId = null;
   render();
 }
 
-function askDeleteDriver(nome){
-  state.confirmDeleteDriverName = nome;
+function askDeleteDriver(btn){
+  state.confirmDeleteDriverName = btn.getAttribute('data-nome');
   render();
 }
 
@@ -1293,7 +1404,8 @@ function cancelDeleteDriver(){
   render();
 }
 
-async function confirmDeleteDriver(nome){
+async function confirmDeleteDriver(btn){
+  const nome = btn.getAttribute('data-nome');
   state.data.motoboys = state.data.motoboys.filter(m => m.nome !== nome);
   state.data.entregas = state.data.entregas.filter(e => e.motoboy !== nome);
   state.data.descontos = state.data.descontos.filter(d => d.motoboy !== nome);
@@ -1349,6 +1461,7 @@ function render(){
   else if(state.view === 'driverChangePassword') renderDriverChangePassword(app);
   else if(state.view === 'driverDashboard') renderDriverDashboard(app);
   else if(state.view === 'adminLogin') renderAdminLogin(app);
+  else if(state.view === 'adminSetup') renderAdminSetup(app);
   else if(state.view === 'adminChangePassword') renderAdminChangePassword(app);
   else if(state.view === 'adminDashboard') renderAdminDashboard(app);
   else if(state.view === 'adminReport') renderAdminReport(app);
@@ -1556,7 +1669,7 @@ function renderEntregaItem(e){
     return `
       <div class="entrega-item">
         <label>Cliente</label>
-        <input type="text" id="editClienteInput_${e.id}" value="${escapeHtml(state.editCliente)}">
+        <input type="text" id="editClienteInput_${escapeHtml(e.id)}" value="${escapeHtml(state.editCliente)}">
         <label>Tipo de entrega</label>
         <div class="type-row">
           <div class="type-btn ${state.editTipo==='cidade' ? 'active-cidade' : ''}" onclick="setEditTipo('cidade')">
@@ -1567,7 +1680,7 @@ function renderEntregaItem(e){
           </div>
         </div>
         <div class="entrega-actions">
-          <button class="mini-btn mini-edit" onclick="salvarEdit('${e.id}')">Guardar</button>
+          <button class="mini-btn mini-edit" onclick="salvarEdit(this)" data-id="${escapeHtml(e.id)}">Guardar</button>
           <button class="mini-btn mini-del" onclick="cancelEdit()">Cancelar</button>
         </div>
       </div>
@@ -1586,18 +1699,18 @@ function renderEntregaItem(e){
       <div class="entrega-valor">${formatMoney(e.valor)}</div>
       <div class="entrega-actions">
         ${avisoAtivo(e) ? `
-          <button class="mini-btn mini-frente-on" onclick="avisarFrente('${e.id}')">Aviso enviado — tocar para cancelar</button>
+          <button class="mini-btn mini-frente-on" onclick="avisarFrente(this)" data-id="${escapeHtml(e.id)}">Aviso enviado — tocar para cancelar</button>
         ` : `
-          <button class="mini-btn mini-frente" onclick="avisarFrente('${e.id}')">Avisar que estou na frente</button>
+          <button class="mini-btn mini-frente" onclick="avisarFrente(this)" data-id="${escapeHtml(e.id)}">Avisar que estou na frente</button>
         `}
       </div>
       <div class="entrega-actions">
         ${isConfirmingDelete ? `
-          <button class="mini-btn mini-confirm" onclick="confirmDelete('${e.id}')">Confirmar apagar</button>
+          <button class="mini-btn mini-confirm" onclick="confirmDelete(this)" data-id="${escapeHtml(e.id)}">Confirmar apagar</button>
           <button class="mini-btn mini-del" onclick="cancelDelete()">Cancelar</button>
         ` : `
-          <button class="mini-btn mini-edit" onclick="startEdit('${e.id}')">Ajustar</button>
-          <button class="mini-btn mini-del" onclick="askDelete('${e.id}')">Apagar</button>
+          <button class="mini-btn mini-edit" onclick="startEdit(this)" data-id="${escapeHtml(e.id)}">Ajustar</button>
+          <button class="mini-btn mini-del" onclick="askDelete(this)" data-id="${escapeHtml(e.id)}">Apagar</button>
         `}
       </div>
     </div>
@@ -1621,6 +1734,52 @@ function renderAdminLogin(app){
   document.getElementById('adminPasswordInput').focus();
 }
 
+function renderAdminSetup(app){
+  app.innerHTML = `
+    <div>
+      <button class="back-btn" onclick="goLogin()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
+      <div class="brand" style="font-size:22px; margin-top:10px;">Criar senha do administrador</div>
+      <div class="brand-sub">Esta é a primeira vez. Crie uma senha forte (8+ caracteres) para proteger o painel.</div>
+      <div class="card">
+        <label for="adminSetupNovaInput">Nova senha</label>
+        <input type="password" id="adminSetupNovaInput" placeholder="Mínimo 8 caracteres">
+        <label for="adminSetupConfirmaInput">Confirmar senha</label>
+        <input type="password" id="adminSetupConfirmaInput" placeholder="Repita a senha" onkeydown="if(event.key==='Enter') submitAdminSetup()">
+        ${state.adminSetupError ? `<div class="error-msg">${state.adminSetupError}</div>` : ''}
+        <button class="btn btn-primary" onclick="submitAdminSetup()">Guardar senha</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('adminSetupNovaInput').focus();
+}
+
+async function submitAdminSetup(){
+  const nova = document.getElementById('adminSetupNovaInput').value;
+  const confirma = document.getElementById('adminSetupConfirmaInput').value;
+  if(!nova || nova.length < 8){
+    state.adminSetupError = 'A senha deve ter pelo menos 8 caracteres.';
+    render();
+    return;
+  }
+  if(nova !== confirma){
+    state.adminSetupError = 'As senhas não coincidem.';
+    render();
+    return;
+  }
+  const sal = gerarSal();
+  state.data.adminSenhaHash = hashSenha(nova, sal);
+  state.data.adminSenhaSalt = sal;
+  state.adminSenhaHash = state.data.adminSenhaHash;
+  state.adminSenhaSalt = state.data.adminSenhaSalt;
+  state.adminSenha = null;
+  await saveData();
+  limparSessaoMotorista();
+  salvarSessaoAdmin();
+  state.view = 'adminDashboard';
+  state.adminSetupError = '';
+  render();
+}
+
 function renderAdminChangePassword(app){
   app.innerHTML = `
     <div>
@@ -1631,7 +1790,7 @@ function renderAdminChangePassword(app){
         <label for="adminChangeAtualInput">Senha atual</label>
         <input type="password" id="adminChangeAtualInput" placeholder="••••">
         <label for="adminChangeNovaInput">Nova senha</label>
-        <input type="password" id="adminChangeNovaInput" placeholder="Mínimo 4 caracteres">
+        <input type="password" id="adminChangeNovaInput" placeholder="Mínimo 8 caracteres">
         <label for="adminChangeConfirmaInput">Confirmar nova senha</label>
         <input type="password" id="adminChangeConfirmaInput" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter') submitAdminChangePassword()">
         ${state.adminChangeError ? `<div class="error-msg">${state.adminChangeError}</div>` : ''}
@@ -1657,7 +1816,7 @@ function renderAdminDashboard(app){
         <div class="card message-card">
           <div class="message-head"><b>${escapeHtml(m.motoboy)}</b><span>${formatHorario(m.data)}</span></div>
           <div class="message-text">${escapeHtml(m.texto)}</div>
-          <button class="btn btn-primary" onclick="confirmarMensagem('${escapeAttr(m.id)}')">OK</button>
+          <button class="btn btn-primary" onclick="confirmarMensagem(this)" data-id="${escapeHtml(m.id)}">OK</button>
         </div>
       `).join('')
     : '';
@@ -1719,10 +1878,10 @@ function renderAdminDashboard(app){
                 <div class="entrega-valor" style="color: var(--tomato);">- ${formatMoney(d.valor)}</div>
                 <div class="entrega-actions">
                   ${state.confirmDeleteDescontoId === d.id ? `
-                    <button class="mini-btn mini-confirm" onclick="confirmDeleteDesconto('${d.id}')">Confirmar remover</button>
+                    <button class="mini-btn mini-confirm" onclick="confirmDeleteDesconto(this)" data-id="${escapeHtml(d.id)}">Confirmar remover</button>
                     <button class="mini-btn mini-del" onclick="cancelDeleteDesconto()">Cancelar</button>
                   ` : `
-                    <button class="mini-btn mini-del" onclick="askDeleteDesconto('${d.id}')">Remover</button>
+                    <button class="mini-btn mini-del" onclick="askDeleteDesconto(this)" data-id="${escapeHtml(d.id)}">Remover</button>
                   `}
                 </div>
               </div>
@@ -1754,11 +1913,11 @@ function renderAdminDashboard(app){
               <div class="card" style="background:#fff5f3; border-color:#facfc8; padding:14px;">
                 <div style="font-size:13px; font-weight:700; margin-bottom:4px;">Apagar perfil ${escapeHtml(nome)}?</div>
                 <div style="font-size:12px; color:var(--ink-soft); margin-bottom:12px;">Isto remove também todas as entregas e descontos deste entregador. Não é possível desfazer.</div>
-                <button class="btn btn-secondary" style="margin:0; background:var(--tomato); border-color:var(--tomato); color:#fff;" onclick="confirmDeleteDriver('${escapeAttr(nome)}')">Confirmar apagar</button>
+                <button class="btn btn-secondary" style="margin:0; background:var(--tomato); border-color:var(--tomato); color:#fff;" onclick="confirmDeleteDriver(this)" data-nome="${escapeHtml(nome)}">Confirmar apagar</button>
                 <button class="btn btn-secondary" onclick="cancelDeleteDriver()">Cancelar</button>
               </div>
             ` : `
-              <button class="btn btn-secondary" style="margin-bottom:16px; background:#fff5f3; border-color:#facfc8; color:var(--tomato);" onclick="askDeleteDriver('${escapeAttr(nome)}')">Apagar perfil</button>
+              <button class="btn btn-secondary" style="margin-bottom:16px; background:#fff5f3; border-color:#facfc8; color:var(--tomato);" onclick="askDeleteDriver(this)" data-nome="${escapeHtml(nome)}">Apagar perfil</button>
             `}
 
             <div class="section-title">Entregas no período selecionado${horario.inicio || horario.fim ? ` · ${horario.inicio || '00:00'} às ${horario.fim || '23:59'}` : ''}</div>
@@ -1796,7 +1955,7 @@ function renderAdminDashboard(app){
 
       return `
         <div class="driver-section">
-          <div class="driver-header" onclick="toggleDriverSection('${escapeAttr(nome)}')">
+          <div class="driver-header" onclick="toggleDriverSection(this)" data-nome="${escapeHtml(nome)}">
             <b>${escapeHtml(nome)} · ${entregasTodas.length} entrega${entregasTodas.length===1?'':'s'}</b>
             <span class="amount">${formatMoney(totalLiquidoAll)}</span>
           </div>
@@ -1921,7 +2080,6 @@ function escapeHtml(str){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function escapeAttr(str){ return escapeHtml(str).replace(/`/g, '&#96;'); }
 
 // captura o valor digitado enquanto o utilizador escreve, para não se perder ao voltar a renderizar
 document.addEventListener('input', function(ev){
