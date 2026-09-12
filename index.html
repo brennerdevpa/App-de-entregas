@@ -233,6 +233,19 @@
   .mini-edit{ background: #e8f7cf; color: #355e12; }
   .mini-del{ background: #fff0ed; color: var(--tomato); }
   .mini-confirm{ background: var(--tomato); color:#fff; }
+  .mini-frente{ background: var(--tomato); color:#fff; }
+  .mini-frente-on{ background:#fff0ed; color:var(--tomato); border:1.5px solid var(--tomato); }
+  .aviso-frente{
+    border-color: var(--tomato);
+    background:#fff7f5;
+    box-shadow: 0 0 0 3px rgba(230,85,69,.16);
+  }
+  @keyframes blink-red{
+    0%, 100%{ border-color: var(--tomato); box-shadow: 0 0 0 3px rgba(230,85,69,.18); }
+    50%{ border-color: #ffb3a8; box-shadow: 0 0 0 6px rgba(230,85,69,.4); }
+  }
+  .aviso-frente.blink{ animation: blink-red 1s ease-in-out infinite; }
+  .badge-frente{ background: var(--tomato); animation: blink-red 1s ease-in-out infinite; }
   .empty{
     text-align:center;
     color: var(--ink-soft);
@@ -910,6 +923,14 @@ async function enviarEntrega(){
   render();
 }
 
+async function avisarFrente(id){
+  const item = state.data.entregas.find(e => e.id === id);
+  if(!item) return;
+  item.aviso = item.aviso ? null : Date.now();
+  await saveData();
+  render();
+}
+
 function startEdit(id){
   const item = state.data.entregas.find(e => e.id === id);
   if(!item) return;
@@ -1391,6 +1412,13 @@ function renderEntregaItem(e){
       </div>
       <div class="entrega-valor">${formatMoney(e.valor)}</div>
       <div class="entrega-actions">
+        ${e.aviso ? `
+          <button class="mini-btn mini-frente-on" onclick="avisarFrente('${e.id}')">Aviso enviado — tocar para cancelar</button>
+        ` : `
+          <button class="mini-btn mini-frente" onclick="avisarFrente('${e.id}')">Avisar que estou na frente</button>
+        `}
+      </div>
+      <div class="entrega-actions">
         ${isConfirmingDelete ? `
           <button class="mini-btn mini-confirm" onclick="confirmDelete('${e.id}')">Confirmar apagar</button>
           <button class="mini-btn mini-del" onclick="cancelDelete()">Cancelar</button>
@@ -1479,7 +1507,7 @@ function renderAdminDashboard(app){
         const itensEntregas = entregasPeriodo.length === 0
           ? '<div class="empty">Sem entregas neste período.</div>'
           : entregasPeriodo.map(e => `
-              <div class="entrega-item">
+              <div class="entrega-item ${e.aviso ? 'aviso-frente blink' : ''}">
                 <div class="entrega-top">
                   <div>
                     <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
@@ -1488,6 +1516,7 @@ function renderAdminDashboard(app){
                   <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
                 </div>
                 <div class="entrega-valor">${formatMoney(e.valor)}</div>
+                ${e.aviso ? `<div style="margin-top:8px;"><span class="badge badge-frente">Entregador na frente — avisar cliente</span></div>` : ''}
               </div>
             `).join('');
 
