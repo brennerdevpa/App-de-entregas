@@ -8,8 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
   :root{
     --bg: #f4f7f5;
@@ -120,6 +119,17 @@
   .btn-primary:hover{ background:#26372f; }
   .btn-secondary{ background: transparent; color: var(--ink-soft); border: 1.5px solid var(--line); margin-top:8px; }
   .btn-ghost{ background: transparent; color: var(--ink-soft); padding: 6px 0; width: auto; font-size: 13px; font-weight: 700; }
+  .report-print-btn{
+    width:auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:11px 14px;
+    font-size:13px;
+    border-radius:12px;
+  }
+  .report-print-btn svg{ width:17px; height:17px; }
   .back-btn{
     width:40px;
     height:40px;
@@ -318,20 +328,19 @@
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDKdV4laGoPMGz2hz-rUd77OIp4BsiX0s0",
   authDomain: "appmotoboys.firebaseapp.com",
+  databaseURL: "https://appmotoboys-default-rtdb.firebaseio.com",
   projectId: "appmotoboys",
   storageBucket: "appmotoboys.firebasestorage.app",
   messagingSenderId: "138452699945",
   appId: "1:138452699945:web:09e5b28d1d405cb599c538"
 };
 
-let db, auth, DOC_REF, unsub = null;
+let db, DOC_REF, docListener = null;
 let firebaseOk = false;
 try{
   firebase.initializeApp(FIREBASE_CONFIG);
-  db = firebase.firestore();
-  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-  auth = firebase.auth();
-  DOC_REF = db.collection('app').doc('estado');
+  db = firebase.database();
+  DOC_REF = db.ref('estado');
   firebaseOk = true;
 }catch(e){
   console.error('Erro ao inicializar Firebase', e);
@@ -344,7 +353,7 @@ let state = {
   driverInput: '',
   driverPendingName: '',
   currentDriver: null,
-  driverPeriodo: 'semana',
+  driverPeriodo: 'dia',
   data: { motoboys: [], entregas: [], descontos: [] },
   novoCliente: '',
   novoTipo: 'cidade',
@@ -368,6 +377,7 @@ let state = {
   saveError: '',
   descInputs: {},
   confirmDeleteDescontoId: null,
+  confirmDeleteDriverName: null,
   relatorio: null,
   loaded: false,
   dataReady: false
@@ -441,7 +451,7 @@ function periodoLabel(periodo){
 }
 
 function getPeriodo(idx){
-  return (state.periodos && state.periodos[idx]) || 'semana';
+  return (state.periodos && state.periodos[idx]) || 'dia';
 }
 
 function getHorarioFiltro(idx){
@@ -495,29 +505,15 @@ async function inicializarFirebase(){
     return;
   }
 
-  try{
-    await auth.signInAnonymously();
-  }catch(e){
-    console.error('Erro ao autenticar anonimamente', e);
-  }
-
   iniciarListener();
-  const options = { source: 'cache' };
   let snap = null;
   try{
-    snap = await DOC_REF.get(options);
+    snap = await DOC_REF.once('value');
   }catch(e){
-    console.error('Erro no cache do Firestore', e);
+    console.error('Erro ao ler dados do Realtime Database', e);
   }
-  if(!snap || !snap.exists){
-    try{
-      snap = await DOC_REF.get();
-    }catch(e){
-      console.error('Erro ao ler dados do Firestore', e);
-    }
-  }
-  if(snap && snap.exists){
-    state.data = snap.data();
+  if(snap && snap.exists()){
+    state.data = snap.val();
     normalizarDados();
     state.dataReady = true;
     render();
@@ -526,8 +522,8 @@ async function inicializarFirebase(){
       await DOC_REF.set(state.data);
       state.dataReady = true;
     }catch(e){
-      console.error('Erro ao criar documento no Firestore', e);
-      state.saveError = 'Não foi possível iniciar os dados no Firebase. Verifique a ligação e as permissões do Firestore.';
+      console.error('Erro ao criar dados no Realtime Database', e);
+      state.saveError = 'Não foi possível iniciar os dados no Firebase. Verifique a ligação e as permissões do banco de dados.';
       render();
     }
   }
@@ -537,11 +533,12 @@ async function inicializarFirebase(){
 }
 
 function iniciarListener(){
-  if(unsub) unsub();
-  // No SDK "compat", o listener pertence à referência do documento.
-  unsub = DOC_REF.onSnapshot(snap => {
-    if(snap.exists){
-      const novos = snap.data();
+  if(docListener){
+    DOC_REF.off('value', docListener);
+  }
+  docListener = snap => {
+    const novos = snap.val();
+    if(novos){
       const entregasNovas = novos.entregas || [];
       if(entregasObservadas === null){
         entregasObservadas = new Set(entregasNovas.map(e => e.id));
@@ -558,8 +555,9 @@ function iniciarListener(){
         render();
       }
     }
-  }, err => {
-    console.error('Erro no listener Firestore', err);
+  };
+  DOC_REF.on('value', docListener, err => {
+    console.error('Erro no listener do Realtime Database', err);
     state.saveError = 'A sincronização com o Firebase falhou. Verifique a ligação e tente recarregar a página.';
     render();
   });
@@ -570,7 +568,7 @@ async function saveData(){
     await DOC_REF.set(state.data);
     state.saveError = '';
   }catch(e){
-    console.error('Erro ao salvar no Firestore', e);
+    console.error('Erro ao salvar no Realtime Database', e);
     state.saveError = 'Não foi possível guardar a alteração. Verifique a ligação e tente novamente.';
     render();
   }
@@ -1100,6 +1098,26 @@ async function confirmDeleteDesconto(id){
   render();
 }
 
+function askDeleteDriver(nome){
+  state.confirmDeleteDriverName = nome;
+  render();
+}
+
+function cancelDeleteDriver(){
+  state.confirmDeleteDriverName = null;
+  render();
+}
+
+async function confirmDeleteDriver(nome){
+  state.data.motoboys = state.data.motoboys.filter(m => m.nome !== nome);
+  state.data.entregas = state.data.entregas.filter(e => e.motoboy !== nome);
+  state.data.descontos = state.data.descontos.filter(d => d.motoboy !== nome);
+  if(state.openDriverSection === nome) state.openDriverSection = null;
+  state.confirmDeleteDriverName = null;
+  await saveData();
+  render();
+}
+
 function abrirRelatorio(idx){
   const horario = getHorarioFiltro(idx);
   state.relatorio = { idx, periodo: getPeriodo(idx), inicio: horario.inicio, fim: horario.fim };
@@ -1278,7 +1296,7 @@ function renderDriverDashboard(app){
   const minhasTodas = state.data.entregas
     .filter(e => e.motoboy === state.currentDriver)
     .sort((a,b) => new Date(b.horario) - new Date(a.horario));
-  const periodo = state.driverPeriodo || 'semana';
+  const periodo = state.driverPeriodo || 'dia';
   const minhas = filterByPeriod(minhasTodas, periodo, 'horario');
   const total = minhas.reduce((s,e) => s + e.valor, 0);
 
@@ -1307,9 +1325,9 @@ function renderDriverDashboard(app){
       </div>
 
       <div class="period-row" aria-label="Filtro de período das entregas">
+        <button class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setDriverPeriodo('mes')">Mensal</button>
         <button class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setDriverPeriodo('dia')">Diário</button>
         <button class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setDriverPeriodo('semana')">Semanal</button>
-        <button class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setDriverPeriodo('mes')">Mensal</button>
       </div>
 
       <div class="card">
@@ -1497,11 +1515,11 @@ function renderAdminDashboard(app){
             `).join('');
 
         corpoAberto = `
-          <div class="driver-body">
+            <div class="driver-body">
             <div class="period-row">
+              <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setPeriodo(${idx},'mes')">Mensal</div>
               <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setPeriodo(${idx},'dia')">Diário</div>
               <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setPeriodo(${idx},'semana')">Semanal</div>
-              <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setPeriodo(${idx},'mes')">Mensal</div>
             </div>
             <div class="section-title">Filtrar por turno (opcional)</div>
             <div class="time-filter">
@@ -1518,6 +1536,16 @@ function renderAdminDashboard(app){
               <div class="stat"><b>${formatMoney(totalLiquidoPeriodo)}</b><span>a pagar</span></div>
             </div>
             <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirRelatorio(${idx})">Gerar relatório</button>
+            ${state.confirmDeleteDriverName === nome ? `
+              <div class="card" style="background:#fff5f3; border-color:#facfc8; padding:14px;">
+                <div style="font-size:13px; font-weight:700; margin-bottom:4px;">Apagar perfil ${escapeHtml(nome)}?</div>
+                <div style="font-size:12px; color:var(--ink-soft); margin-bottom:12px;">Isto remove também todas as entregas e descontos deste entregador. Não é possível desfazer.</div>
+                <button class="btn btn-secondary" style="margin:0; background:var(--tomato); border-color:var(--tomato); color:#fff;" onclick="confirmDeleteDriver('${escapeAttr(nome)}')">Confirmar apagar</button>
+                <button class="btn btn-secondary" onclick="cancelDeleteDriver()">Cancelar</button>
+              </div>
+            ` : `
+              <button class="btn btn-secondary" style="margin-bottom:16px; background:#fff5f3; border-color:#facfc8; color:var(--tomato);" onclick="askDeleteDriver('${escapeAttr(nome)}')">Apagar perfil</button>
+            `}
 
             <div class="section-title">Entregas no período selecionado${horario.inicio || horario.fim ? ` · ${horario.inicio || '00:00'} às ${horario.fim || '23:59'}` : ''}</div>
             ${itensEntregas}
@@ -1618,13 +1646,16 @@ function renderAdminReport(app){
     <div>
       <div class="no-print" style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px;">
         <button class="back-btn" onclick="fecharRelatorio()" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg></button>
-        <button class="btn-ghost" onclick="imprimirRelatorio()">Imprimir / guardar PDF</button>
+        <button class="btn btn-primary report-print-btn" onclick="imprimirRelatorio()" aria-label="Imprimir ou guardar relatório em PDF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+          Imprimir / guardar PDF
+        </button>
       </div>
 
       <div class="period-row no-print">
+        <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setRelatorioPeriodo('mes')">Mensal</div>
         <div class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setRelatorioPeriodo('dia')">Diário</div>
         <div class="period-btn ${periodo==='semana' ? 'active' : ''}" onclick="setRelatorioPeriodo('semana')">Semanal</div>
-        <div class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setRelatorioPeriodo('mes')">Mensal</div>
       </div>
 
       <div class="print-area card">
