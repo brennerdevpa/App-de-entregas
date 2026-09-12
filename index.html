@@ -340,6 +340,42 @@
   .message-head span{ font-size:11px; color:var(--ink-soft); white-space:nowrap; }
   .message-text{ font-size:14px; line-height:1.5; margin:8px 0 12px; }
   .msg-enviada{ color:var(--lettuce); font-size:12.5px; font-weight:700; margin:-4px 0 12px; }
+  .msg-resposta{
+    background: #fbfcfb;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 4px 0 8px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .msg-resposta-head{
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .msg-item{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .msg-item-head{
+    display:flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .msg-item-head span{ font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
+  .msg-aguardando{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-weight: 600;
+    margin-top: 8px;
+  }
   @keyframes alert-in{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:translateY(0); } }
   .section-title{ font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 18px 0 8px; text-transform: none; }
   .report-table{ width:100%; border-collapse: collapse; margin-bottom: 10px; }
@@ -442,6 +478,9 @@ let state = {
   horarios: {},
   descontoErro: '',
   saveError: '',
+  syncError: '',
+  replyError: '',
+  replyInputs: {},
   descInputs: {},
   confirmDeleteDescontoId: null,
   confirmDeleteDriverName: null,
@@ -652,6 +691,7 @@ let inicializacaoConcluida = false;
 let entregasObservadas = null;
 let avisosObservados = null;
 let mensagensObservadas = null;
+let repliesObservadas = null;
 let miniTela = null;
 let miniTimer = null;
 
@@ -664,8 +704,6 @@ async function inicializarFirebase(){
     return;
   }
 
-  iniciarListener();
-
   if(firebase.auth){
     try{
       await firebase.auth().signInAnonymously();
@@ -675,6 +713,8 @@ async function inicializarFirebase(){
       render();
     }
   }
+
+  iniciarListener();
 
   let snap = null;
   try{
@@ -702,11 +742,17 @@ async function inicializarFirebase(){
   restauraSessaoAdmin();
 }
 
+let falhasSincronizacao = 0;
+let timerReconectar = null;
+
 function iniciarListener(){
   if(docListener){
     DOC_REF.off('value', docListener);
   }
   docListener = snap => {
+    falhasSincronizacao = 0;
+    const haviaErroSync = !!state.syncError;
+    if(haviaErroSync) state.syncError = '';
     const novos = snap.val();
     if(novos){
       const entregasNovas = novos.entregas || [];
@@ -738,20 +784,51 @@ function iniciarListener(){
         mensagensObservadas = new Set(mensagensNovas.map(m => m.id));
         if(adicionadasMsg.length) avisarNovaMensagem(adicionadasMsg[adicionadasMsg.length - 1]);
       }
+      const respondidas = {};
+      mensagensNovas.forEach(m => { if(m && m.resposta) respondidas[m.id] = m; });
+      if(repliesObservadas === null){
+        repliesObservadas = new Set(Object.keys(respondidas));
+      }else{
+        Object.keys(respondidas).forEach(id => {
+          if(!repliesObservadas.has(id)) avisarRespostaRecebida(respondidas[id]);
+        });
+        repliesObservadas = new Set(Object.keys(respondidas));
+      }
       const atual = JSON.stringify(state.data);
       if(JSON.stringify(novos) !== atual){
         state.data = novos;
         normalizarDados();
         state.dataReady = true;
         render();
+      }else if(haviaErroSync){
+        render();
       }
+    }else if(haviaErroSync){
+      render();
     }
   };
   DOC_REF.on('value', docListener, err => {
     console.error('Erro no listener do Realtime Database', err);
-    state.saveError = 'A sincronização com o Firebase falhou. Verifique a ligação e tente recarregar a página.';
-    render();
+    falhasSincronizacao++;
+    const mensagemErro = String((err && err.message) ? err.message : '').toLowerCase();
+    if(mensagemErro.indexOf('permission') !== -1 && firebase && firebase.auth){
+      falhasSincronizacao = 0;
+      resetearAuthFirebase();
+    }
+    if(falhasSincronizacao >= 3){
+      state.syncError = 'A sincronização com o Firebase falhou. Verifique a ligação e tente recarregar a página.';
+      render();
+    }
+    reconectarListener();
   });
+}
+
+function reconectarListener(){
+  if(timerReconectar) clearTimeout(timerReconectar);
+  timerReconectar = setTimeout(() => {
+    timerReconectar = null;
+    if(firebaseOk && DOC_REF) iniciarListener();
+  }, 3000);
 }
 
 async function saveData(){
@@ -970,6 +1047,39 @@ function avisarNovaMensagem(m){
   render();
   setTimeout(() => {
     if(state.liveAlert && state.liveAlert.mensagem === mensagem){
+      state.liveAlert = null;
+      render();
+    }
+  }, 6500);
+}
+
+async function responderMensagem(el){
+  const id = el.getAttribute('data-id');
+  const input = document.getElementById('msgResposta_' + id);
+  const resposta = (input ? input.value : '').trim();
+  if(!resposta){
+    state.replyError = 'Escreva a resposta antes de enviar.';
+    render();
+    return;
+  }
+  const m = state.data.mensagens.find(x => x.id === id);
+  if(!m) return;
+  m.resposta = resposta;
+  m.respostaData = new Date().toISOString();
+  state.replyError = '';
+  delete state.replyInputs[id];
+  await saveData();
+  render();
+}
+
+function avisarRespostaRecebida(m){
+  if(state.view !== 'driverDashboard' || !state.currentDriver) return;
+  if(m.motoboy !== state.currentDriver) return;
+  const mensagem = m.resposta || '';
+  state.liveAlert = { mensagem: mensagem, tipo: 'resp' };
+  render();
+  setTimeout(() => {
+    if(state.liveAlert && state.liveAlert.tipo === 'resp' && state.liveAlert.mensagem === mensagem){
       state.liveAlert = null;
       render();
     }
@@ -1478,9 +1588,12 @@ function render(){
   if(state.saveError){
     app.insertAdjacentHTML('afterbegin', `<div class="error-msg">${escapeHtml(state.saveError)}</div>`);
   }
+  if(state.syncError){
+    app.insertAdjacentHTML('afterbegin', `<div class="error-msg">${escapeHtml(state.syncError)}</div>`);
+  }
   if(state.liveAlert){
-    const labelLive = state.liveAlert.tipo === 'frente' ? 'Entregador na frente' : (state.liveAlert.tipo === 'mensagem' ? 'Mensagem do entregador' : 'Nova entrega recebida');
-    app.insertAdjacentHTML('beforeend', `<div class="live-alert ${state.liveAlert.tipo === 'frente' ? 'live-alert-frente' : (state.liveAlert.tipo === 'mensagem' ? 'live-alert-mensagem' : '')}" role="status"><b>${labelLive}</b>${escapeHtml(state.liveAlert.mensagem)}</div>`);
+    const labelLive = state.liveAlert.tipo === 'frente' ? 'Entregador na frente' : (state.liveAlert.tipo === 'resp' ? 'Resposta do administrador' : (state.liveAlert.tipo === 'mensagem' ? 'Mensagem do entregador' : 'Nova entrega recebida'));
+    app.insertAdjacentHTML('beforeend', `<div class="live-alert ${state.liveAlert.tipo === 'frente' ? 'live-alert-frente' : (state.liveAlert.tipo === 'mensagem' || state.liveAlert.tipo === 'resp' ? 'live-alert-mensagem' : '')}" role="status"><b>${labelLive}</b>${escapeHtml(state.liveAlert.mensagem)}</div>`);
   }
   atualizarMiniTela();
 
@@ -1608,6 +1721,23 @@ function renderDriverDashboard(app){
   const minhas = filterByPeriod(minhasTodas, periodo, 'horario');
   const total = minhas.reduce((s,e) => s + e.valor, 0);
 
+  const minhasMsgs = (state.data.mensagens || [])
+    .filter(m => m.motoboy === state.currentDriver)
+    .sort((a,b) => new Date(b.data) - new Date(a.data));
+  const msgsHtml = minhasMsgs.length === 0
+    ? '<div class="empty" style="padding:10px;">Ainda não enviou mensagens ao administrador.</div>'
+    : minhasMsgs.map(m => `
+        <div class="msg-item">
+          <div class="msg-item-head"><b>${escapeHtml(m.texto)}</b><span>${formatHorario(m.data)}</span></div>
+          ${m.resposta ? `
+            <div class="msg-resposta" style="margin-top:10px;">
+              <div class="msg-resposta-head">Resposta do administrador · ${formatHorario(m.respostaData)}</div>
+              ${escapeHtml(m.resposta)}
+            </div>
+          ` : `<div class="msg-aguardando">Aguardando resposta do administrador...<span style="font-weight:500;"> (o adm vê sua mensagem)</span></div>`}
+        </div>
+      `).join('');
+
   let listaHtml = '';
   if(minhas.length === 0){
     listaHtml = minhasTodas.length === 0
@@ -1639,6 +1769,9 @@ function renderDriverDashboard(app){
         ${state.msgError ? `<div class="error-msg">${state.msgError}</div>` : ''}
         <button class="btn btn-secondary" style="margin:0;" onclick="enviarMensagem()">Enviar mensagem</button>
       </div>
+
+      <div class="section-title">Minhas mensagens</div>
+      ${msgsHtml}
 
       <div class="period-row" aria-label="Filtro de período das entregas">
         <button class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setDriverPeriodo('mes')">Mensal</button>
@@ -1825,7 +1958,16 @@ function renderAdminDashboard(app){
         <div class="card message-card">
           <div class="message-head"><b>${escapeHtml(m.motoboy)}</b><span>${formatHorario(m.data)}</span></div>
           <div class="message-text">${escapeHtml(m.texto)}</div>
-          <button class="btn btn-primary" onclick="confirmarMensagem(this)" data-id="${escapeHtml(m.id)}">OK</button>
+          ${m.resposta ? `
+            <div class="msg-resposta">
+              <div class="msg-resposta-head">Sua resposta · ${formatHorario(m.respostaData)}</div>
+              ${escapeHtml(m.resposta)}
+            </div>
+          ` : `
+            <input type="text" id="msgResposta_${escapeHtml(m.id)}" placeholder="Escreva a resposta..." value="${escapeHtml(state.replyInputs[m.id] || '')}" onkeydown="if(event.key==='Enter') responderMensagem(this)" data-id="${escapeHtml(m.id)}">
+            <button class="btn btn-secondary" style="margin-top:6px;" onclick="responderMensagem(this)" data-id="${escapeHtml(m.id)}">Responder</button>
+          `}
+          <button class="btn btn-primary" style="margin-top:8px;" onclick="confirmarMensagem(this)" data-id="${escapeHtml(m.id)}">OK</button>
         </div>
       `).join('')
     : '';
@@ -1989,6 +2131,7 @@ function renderAdminDashboard(app){
         <div class="stat"><b>${todas.length}</b><span>entregas</span></div>
         <div class="stat"><b>${formatMoney(totalLiquidoGeral)}</b><span>total a pagar</span></div>
       </div>
+      ${state.replyError ? `<div class="error-msg">${escapeHtml(state.replyError)}</div>` : ''}
       ${mensagensHtml}
       <div class="card alert-control">
         <div class="alert-control-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></div>
@@ -2100,6 +2243,7 @@ document.addEventListener('input', function(ev){
   if(id && id.startsWith('editClienteInput_')) state.editCliente = ev.target.value;
   if(id && id.startsWith('descDescricao_')) state.descInputs['d_' + id.split('_')[1]] = ev.target.value;
   if(id && id.startsWith('descValor_')) state.descInputs['v_' + id.split('_')[1]] = ev.target.value;
+  if(id && id.startsWith('msgResposta_')) state.replyInputs[id.slice(12)] = ev.target.value;
 });
 
 (async function init(){
