@@ -551,6 +551,7 @@ function normalizarDados(){
 let inicializacaoConcluida = false;
 let entregasObservadas = null;
 let miniTela = null;
+let miniTimer = null;
 
 async function inicializarFirebase(){
   state.loaded = true;
@@ -817,7 +818,13 @@ async function abrirMiniTela(){
   try{
     miniTela = await window.documentPictureInPicture.requestWindow({ width: 360, height: 420, preferInitialWindowPlacement: true });
     miniTela.document.title = 'Registo de Entregas';
-    miniTela.addEventListener('pagehide', () => { miniTela = null; render(); });
+    miniTela.addEventListener('pagehide', () => {
+      miniTela = null;
+      if(miniTimer){ clearInterval(miniTimer); miniTimer = null; }
+      render();
+    });
+    if(miniTimer) clearInterval(miniTimer);
+    miniTimer = setInterval(atualizarMiniTela, 800);
     atualizarMiniTela();
     render();
   }catch(e){
@@ -831,6 +838,10 @@ function atualizarMiniTela(){
   if(!miniTela || miniTela.closed) return;
   const entregas = [...state.data.entregas].sort((a,b) => new Date(b.horario) - new Date(a.horario));
   const recentes = entregas.slice(0, 4);
+  const temAviso = recentes.some(e => e.aviso);
+  const avisoBanner = temAviso
+    ? '<div class="notice">Entregador na frente — avisar cliente!</div>'
+    : '';
   const itens = recentes.length
     ? recentes.map(e => `
       <div class="item ${e.aviso ? 'aviso' : ''}">
@@ -844,10 +855,12 @@ function atualizarMiniTela(){
       *{box-sizing:border-box} body{margin:0;padding:18px;background:#f4f7f5;color:#15201c;font-family:Arial,sans-serif}
       header{display:flex;justify-content:space-between;align-items:start;margin-bottom:16px} h1{font-size:17px;margin:0 0 4px;letter-spacing:-.4px} p{margin:0;color:#71807a;font-size:12px}
       .count{padding:7px 10px;border-radius:10px;background:#b8f35a;font-size:12px;font-weight:700}.item{background:#fff;border:1px solid #e3e9e5;border-radius:12px;padding:11px;margin-bottom:8px}.item b,.item span,.item small{display:block}.item b{font-size:13px}.item span{font-size:12px;margin:3px 0}.item small{color:#71807a;font-size:10px}.empty{padding:25px 0;text-align:center}
-      .flag{color:#e65545;font-size:10px;margin-left:4px;vertical-align:middle}.item.aviso{border-color:#e65545;background:#fff5f3;animation:blink 1s ease-in-out infinite}
-      @keyframes blink{0%,100%{box-shadow:0 0 0 3px rgba(230,85,69,.18)}50%{box-shadow:0 0 0 6px rgba(230,85,69,.45)}}
+      .notice{margin-bottom:10px;padding:10px 12px;border-radius:10px;background:#e65545;color:#fff;font-weight:700;font-size:12px;text-align:center;animation:blink 1s ease-in-out infinite}
+      .flag{color:#e65545;font-size:10px;margin-left:4px;vertical-align:middle}.item.aviso{border-color:#e65545;background:#ffe3df;box-shadow:0 0 0 3px rgba(230,85,69,.3);animation:blink 1s ease-in-out infinite}
+      @keyframes blink{0%,100%{opacity:1}50%{opacity:.55}}
     </style>
     <header><div><h1>Entregas ao vivo</h1><p>Monitor do administrador</p></div><div class="count">${entregas.length} entregas</div></header>
+    ${avisoBanner}
     ${itens}`;
 }
 
