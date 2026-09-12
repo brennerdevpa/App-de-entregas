@@ -331,6 +331,14 @@
   .alert-control .btn{ width:auto; padding:9px 12px; font-size:12px; }
   .live-alert{ position:fixed; z-index:1000; left:14px; right:14px; bottom:14px; margin:0 auto; max-width:330px; padding:15px 18px; border-radius:15px; background:var(--ink); color:#fff; box-shadow:0 18px 42px rgba(21,32,28,.25); font-size:13px; line-height:1.5; animation:alert-in .25s ease-out; }
   .live-alert b{ display:block; margin-bottom:2px; }
+  .live-alert-frente{ background: var(--tomato); }
+  .live-alert-mensagem{ background: var(--lettuce); }
+  .message-card{ border-color:#eed483; background:#fffbea; }
+  .message-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .message-head b{ font-size:14px; }
+  .message-head span{ font-size:11px; color:var(--ink-soft); white-space:nowrap; }
+  .message-text{ font-size:14px; line-height:1.5; margin:8px 0 12px; }
+  .msg-enviada{ color:var(--lettuce); font-size:12.5px; font-weight:700; margin:-4px 0 12px; }
   @keyframes alert-in{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:translateY(0); } }
   .section-title{ font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 18px 0 8px; text-transform: none; }
   .report-table{ width:100%; border-collapse: collapse; margin-bottom: 10px; }
@@ -406,9 +414,12 @@ let state = {
   driverPendingName: '',
   currentDriver: null,
   driverPeriodo: 'dia',
-  data: { motoboys: [], entregas: [], descontos: [] },
+  data: { motoboys: [], entregas: [], descontos: [], mensagens: [] },
   novoCliente: '',
   novoTipo: 'cidade',
+  msgTexto: '',
+  msgEnviada: false,
+  msgError: '',
   editingId: null,
   editCliente: '',
   editTipo: 'cidade',
@@ -454,6 +465,13 @@ function formatHorario(iso){
 
 function formatHora(iso){
   return new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+const AVISO_DURACAO = 60000;
+
+function avisoAtivo(e){
+  if(!e || !e.aviso) return false;
+  return (Date.now() - Number(e.aviso)) < AVISO_DURACAO;
 }
 
 // ---------- períodos (diário / semanal / mensal) ----------
@@ -538,18 +556,27 @@ function normalizarDados(){
   if(!state.data.motoboys) state.data.motoboys = [];
   if(!state.data.entregas) state.data.entregas = [];
   if(!state.data.descontos) state.data.descontos = [];
+  if(!state.data.mensagens) state.data.mensagens = [];
   state.data.motoboys = state.data.motoboys.map(m => typeof m === 'string' ? { nome: m, senha: null } : m);
   state.data.entregas = state.data.entregas
     .filter(e => e && e.id && e.motoboy && e.cliente)
-    .map(e => ({ ...e, valor: Number(e.valor) || VALORES[e.tipo] || 0 }));
+    .map(e => {
+      const val = { ...e, valor: Number(e.valor) || VALORES[e.tipo] || 0 };
+      if(val.aviso && !avisoAtivo(val)) val.aviso = null;
+      return val;
+    });
   state.data.descontos = state.data.descontos
     .filter(d => d && d.id && d.motoboy)
     .map(d => ({ ...d, valor: Number(d.valor) || 0 }));
+  state.data.mensagens = state.data.mensagens
+    .filter(m => m && m.id && m.texto);
   state.adminSenha = state.data.adminSenha || '1234';
 }
 
 let inicializacaoConcluida = false;
 let entregasObservadas = null;
+let avisosObservados = null;
+let mensagensObservadas = null;
 let miniTela = null;
 let miniTimer = null;
 
@@ -603,6 +630,27 @@ function iniciarListener(){
         const adicionadas = entregasNovas.filter(e => e && e.id && !entregasObservadas.has(e.id));
         entregasObservadas = new Set(entregasNovas.map(e => e.id));
         if(adicionadas.length) avisarNovasEntregas(adicionadas);
+      }
+      const avisosNovos = {};
+      entregasNovas.forEach(e => { if(e && avisoAtivo(e)) avisosNovos[e.id] = e.aviso; });
+      if(avisosObservados === null){
+        avisosObservados = avisosNovos;
+      }else{
+        Object.keys(avisosNovos).forEach(id => {
+          if(avisosObservados[id] === undefined){
+            const entrega = entregasNovas.find(e => e.id === id);
+            if(entrega) avisarFrenteRecebida(entrega);
+          }
+        });
+        avisosObservados = avisosNovos;
+      }
+      const mensagensNovas = novos.mensagens || [];
+      if(mensagensObservadas === null){
+        mensagensObservadas = new Set(mensagensNovas.map(m => m.id));
+      }else{
+        const adicionadasMsg = mensagensNovas.filter(m => m && m.id && !mensagensObservadas.has(m.id));
+        mensagensObservadas = new Set(mensagensNovas.map(m => m.id));
+        if(adicionadasMsg.length) avisarNovaMensagem(adicionadasMsg[adicionadasMsg.length - 1]);
       }
       const atual = JSON.stringify(state.data);
       if(JSON.stringify(novos) !== atual){
@@ -809,6 +857,59 @@ function avisarNovasEntregas(entregas){
   }, 6500);
 }
 
+function avisarFrenteRecebida(entrega){
+  if(!state.adminAlerts || !['adminDashboard', 'adminReport'].includes(state.view)) return;
+  const mensagem = `${entrega.motoboy} está na frente — avisar ${entrega.cliente}.`;
+  state.liveAlert = { mensagem, tipo: 'frente' };
+  if('Notification' in window && Notification.permission === 'granted'){
+    new Notification('Entregador na frente', { body: mensagem, tag: 'appmotoboys-frente' });
+  }
+  render();
+  setTimeout(() => {
+    if(state.liveAlert && state.liveAlert.mensagem === mensagem){
+      state.liveAlert = null;
+      render();
+    }
+  }, 6500);
+}
+
+function avisarNovaMensagem(m){
+  if(!state.adminAlerts || !['adminDashboard', 'adminReport'].includes(state.view)) return;
+  const mensagem = m.motoboy + ' enviou: ' + m.texto;
+  state.liveAlert = { mensagem, tipo: 'mensagem' };
+  if('Notification' in window && Notification.permission === 'granted'){
+    new Notification('Mensagem do entregador', { body: mensagem, tag: 'appmotoboys-mensagem' });
+  }
+  render();
+  setTimeout(() => {
+    if(state.liveAlert && state.liveAlert.mensagem === mensagem){
+      state.liveAlert = null;
+      render();
+    }
+  }, 6500);
+}
+
+async function enviarMensagem(){
+  const texto = state.msgTexto.trim();
+  if(!texto){
+    state.msgError = 'Escreva a mensagem antes de enviar.';
+    render();
+    return;
+  }
+  state.data.mensagens.push({ id: uid(), motoboy: state.currentDriver, texto, data: new Date().toISOString() });
+  state.msgTexto = '';
+  state.msgEnviada = true;
+  state.msgError = '';
+  await saveData();
+  render();
+}
+
+async function confirmarMensagem(id){
+  state.data.mensagens = state.data.mensagens.filter(m => m.id !== id);
+  await saveData();
+  render();
+}
+
 async function abrirMiniTela(){
   if(!window.documentPictureInPicture){
     state.adminAlertError = 'A mini tela sempre no topo funciona no Chrome ou Edge atualizados.';
@@ -838,14 +939,14 @@ function atualizarMiniTela(){
   if(!miniTela || miniTela.closed) return;
   const entregas = [...state.data.entregas].sort((a,b) => new Date(b.horario) - new Date(a.horario));
   const recentes = entregas.slice(0, 4);
-  const temAviso = recentes.some(e => e.aviso);
+  const temAviso = recentes.some(e => avisoAtivo(e));
   const avisoBanner = temAviso
     ? '<div class="notice">Entregador na frente — avisar cliente!</div>'
     : '';
   const itens = recentes.length
     ? recentes.map(e => `
-      <div class="item ${e.aviso ? 'aviso' : ''}">
-        <b>${escapeHtml(e.motoboy)}${e.aviso ? ' <span class="flag">NA FRENTE</span>' : ''}</b>
+      <div class="item ${avisoAtivo(e) ? 'aviso' : ''}">
+        <b>${escapeHtml(e.motoboy)}${avisoAtivo(e) ? ' <span class="flag">NA FRENTE</span>' : ''}</b>
         <span>${escapeHtml(e.cliente)} · ${formatMoney(e.valor)}</span>
         <small>${formatHorario(e.horario)}</small>
       </div>`).join('')
@@ -989,7 +1090,7 @@ async function enviarEntrega(){
 async function avisarFrente(id){
   const item = state.data.entregas.find(e => e.id === id);
   if(!item) return;
-  item.aviso = item.aviso ? null : Date.now();
+  item.aviso = avisoAtivo(item) ? null : Date.now();
   await saveData();
   render();
 }
@@ -1256,7 +1357,8 @@ function render(){
     app.insertAdjacentHTML('afterbegin', `<div class="error-msg">${escapeHtml(state.saveError)}</div>`);
   }
   if(state.liveAlert){
-    app.insertAdjacentHTML('beforeend', `<div class="live-alert" role="status"><b>Nova entrega recebida</b>${escapeHtml(state.liveAlert.mensagem)}</div>`);
+    const labelLive = state.liveAlert.tipo === 'frente' ? 'Entregador na frente' : (state.liveAlert.tipo === 'mensagem' ? 'Mensagem do entregador' : 'Nova entrega recebida');
+    app.insertAdjacentHTML('beforeend', `<div class="live-alert ${state.liveAlert.tipo === 'frente' ? 'live-alert-frente' : (state.liveAlert.tipo === 'mensagem' ? 'live-alert-mensagem' : '')}" role="status"><b>${labelLive}</b>${escapeHtml(state.liveAlert.mensagem)}</div>`);
   }
   atualizarMiniTela();
 
@@ -1408,6 +1510,14 @@ function renderDriverDashboard(app){
         <div class="stat"><b>${formatMoney(total)}</b><span>a receber</span></div>
       </div>
 
+      <div class="card">
+        <label>Mensagem ao administrador</label>
+        <input type="text" id="adminMsgInput" placeholder="Ex: Vou atrasar, cliente não atende..." value="${escapeHtml(state.msgTexto)}" onkeydown="if(event.key==='Enter') enviarMensagem()">
+        ${state.msgEnviada ? '<div class="msg-enviada">Mensagem enviada ao administrador.</div>' : ''}
+        ${state.msgError ? `<div class="error-msg">${state.msgError}</div>` : ''}
+        <button class="btn btn-secondary" style="margin:0;" onclick="enviarMensagem()">Enviar mensagem</button>
+      </div>
+
       <div class="period-row" aria-label="Filtro de período das entregas">
         <button class="period-btn ${periodo==='mes' ? 'active' : ''}" onclick="setDriverPeriodo('mes')">Mensal</button>
         <button class="period-btn ${periodo==='dia' ? 'active' : ''}" onclick="setDriverPeriodo('dia')">Diário</button>
@@ -1475,7 +1585,7 @@ function renderEntregaItem(e){
       </div>
       <div class="entrega-valor">${formatMoney(e.valor)}</div>
       <div class="entrega-actions">
-        ${e.aviso ? `
+        ${avisoAtivo(e) ? `
           <button class="mini-btn mini-frente-on" onclick="avisarFrente('${e.id}')">Aviso enviado — tocar para cancelar</button>
         ` : `
           <button class="mini-btn mini-frente" onclick="avisarFrente('${e.id}')">Avisar que estou na frente</button>
@@ -1540,6 +1650,18 @@ function renderAdminDashboard(app){
   const totalDescontosGeral = todosDescontos.reduce((s,d) => s + d.valor, 0);
   const totalLiquidoGeral = totalBrutoGeral - totalDescontosGeral;
 
+  const mensagensHtml = (state.data.mensagens || []).length
+    ? [...state.data.mensagens]
+      .sort((a,b) => new Date(b.data) - new Date(a.data))
+      .map(m => `
+        <div class="card message-card">
+          <div class="message-head"><b>${escapeHtml(m.motoboy)}</b><span>${formatHorario(m.data)}</span></div>
+          <div class="message-text">${escapeHtml(m.texto)}</div>
+          <button class="btn btn-primary" onclick="confirmarMensagem('${escapeAttr(m.id)}')">OK</button>
+        </div>
+      `).join('')
+    : '';
+
   let corpo = '';
   if(motoboys.length === 0){
     corpo = '<div class="empty">Ainda não há entregadores registados.</div>';
@@ -1570,7 +1692,7 @@ function renderAdminDashboard(app){
         const itensEntregas = entregasPeriodo.length === 0
           ? '<div class="empty">Sem entregas neste período.</div>'
           : entregasPeriodo.map(e => `
-              <div class="entrega-item ${e.aviso ? 'aviso-frente blink' : ''}">
+              <div class="entrega-item ${avisoAtivo(e) ? 'aviso-frente blink' : ''}">
                 <div class="entrega-top">
                   <div>
                     <div class="entrega-cliente">${escapeHtml(e.cliente)}</div>
@@ -1579,7 +1701,7 @@ function renderAdminDashboard(app){
                   <span class="badge badge-${e.tipo}">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'}</span>
                 </div>
                 <div class="entrega-valor">${formatMoney(e.valor)}</div>
-                ${e.aviso ? `<div style="margin-top:8px;"><span class="badge badge-frente">Entregador na frente — avisar cliente</span></div>` : ''}
+                ${avisoAtivo(e) ? `<div style="margin-top:8px;"><span class="badge badge-frente">Entregador na frente — avisar cliente</span></div>` : ''}
               </div>
             `).join('');
 
@@ -1662,9 +1784,9 @@ function renderAdminDashboard(app){
         previaHtml = `
           <div class="driver-preview">
             ${recentes.map(e => `
-              <div class="preview-item ${e.aviso ? 'aviso-frente blink' : ''}">
+              <div class="preview-item ${avisoAtivo(e) ? 'aviso-frente blink' : ''}">
                 <span class="preview-cliente">${escapeHtml(e.cliente)}</span>
-                <span class="preview-meta">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'} · ${formatHora(e.horario)}${e.aviso ? ' · NA FRENTE' : ''}</span>
+                <span class="preview-meta">${e.tipo === 'cidade' ? 'Cidade' : 'Estrada'} · ${formatHora(e.horario)}${avisoAtivo(e) ? ' · NA FRENTE' : ''}</span>
               </div>
             `).join('')}
             ${entregasTodas.length > 3 ? `<div class="preview-more">+ ${entregasTodas.length - 3} mais — toque para expandir</div>` : ''}
@@ -1698,6 +1820,7 @@ function renderAdminDashboard(app){
         <div class="stat"><b>${todas.length}</b><span>entregas</span></div>
         <div class="stat"><b>${formatMoney(totalLiquidoGeral)}</b><span>total a pagar</span></div>
       </div>
+      ${mensagensHtml}
       <div class="card alert-control">
         <div class="alert-control-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></div>
         <div class="alert-control-copy"><b>Alertas de novas entregas</b>${state.adminAlerts ? 'Ativos neste navegador.' : 'Receba um pop-up mesmo trabalhando em outra aba.'}${state.adminAlertError ? `<br><span style="color:var(--tomato);">${escapeHtml(state.adminAlertError)}</span>` : ''}</div>
@@ -1805,6 +1928,7 @@ document.addEventListener('input', function(ev){
   const id = ev.target.id;
   if(id === 'driverNameInput') state.driverInput = ev.target.value;
   if(id === 'clienteInput') state.novoCliente = ev.target.value;
+  if(id === 'adminMsgInput') state.msgTexto = ev.target.value;
   if(id && id.startsWith('editClienteInput_')) state.editCliente = ev.target.value;
   if(id && id.startsWith('descDescricao_')) state.descInputs['d_' + id.split('_')[1]] = ev.target.value;
   if(id && id.startsWith('descValor_')) state.descInputs['v_' + id.split('_')[1]] = ev.target.value;
